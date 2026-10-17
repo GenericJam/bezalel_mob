@@ -16,9 +16,8 @@ defmodule Bezalel.Agent.Reply do
   fold over its entries.
   """
 
-  alias Bezalel.Agent.Card
+  alias Bezalel.Agent.{Card, Patterns}
   alias Bezalel.Library.Transcript
-  alias Bezalel.Study.Patterns
   alias Rho.Session
 
   @type status :: :running | :done | :stopped | :error

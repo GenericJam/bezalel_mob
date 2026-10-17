@@ -26,7 +26,8 @@ defmodule Bezalel.Agent.Card do
   the glosses don't share stays plain.
   """
 
-  alias Bezalel.Study.{Patterns, Reference}
+  alias Bezalel.Agent.Patterns
+  alias Bezalel.Study.Reference
 
   # Verses a card shows; a longer passage says how many more there are.
   @max_verses 6

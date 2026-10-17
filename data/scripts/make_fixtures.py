@@ -1,6 +1,12 @@
 """Cut the small test packs from the built packs.
 
-  python3 data/scripts/make_fixtures.py [--packs data/out] [--out test/fixtures/packs] [--pack core ...]
+  python3 data/scripts/make_fixtures.py [--packs data/out] [--out ../bezalel_core/test/fixtures/packs] [--pack core ...]
+
+The fixtures live in bezalel_core (the study tools' tests), checked out
+beside this repository. This repository's tests read them from the
+bezalel_core dependency: the pinned deps/bezalel_core, or this sibling
+checkout with BEZALEL_LOCAL_DEPS=bezalel_core, so fresh fixtures reach them
+only that way or once bezalel_core is pushed and its pin bumped.
 
 Each fixture is a pack file with the same tables, schemas and indexes as the
 real pack (data/out/<pack>.sqlite), holding only the rows around a few
@@ -459,7 +465,9 @@ def main() -> None:
     root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser()
     parser.add_argument("--packs", type=Path, default=root / "data" / "out")
-    parser.add_argument("--out", type=Path, default=root / "test" / "fixtures" / "packs")
+    parser.add_argument(
+        "--out", type=Path, default=root.parent / "bezalel_core" / "test" / "fixtures" / "packs"
+    )
     parser.add_argument("--pack", action="append", choices=sorted(PACKS), help="only these packs (repeatable)")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)

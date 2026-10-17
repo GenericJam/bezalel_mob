@@ -9,10 +9,6 @@ config :bezalel, Bezalel.Repo,
       "bezalel_test_#{System.pid()}_#{System.unique_integer([:positive])}.db"
     )
 
-# The study tools read the small packs cut by data/scripts/make_fixtures.py,
-# never the real ones in data/out.
-config :bezalel, :study_packs_dir, Path.expand("../test/fixtures/packs", __DIR__)
-
 config :logger, level: :warning
 
 # Sign-ins and API keys in memory, and the sign-in page "opened" into the

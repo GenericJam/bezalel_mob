@@ -15,17 +15,21 @@ Muster) applies on top.
 
 | Repo | What | Where it comes from in `mix.exs` |
 |---|---|---|
-| **bezalel** (this, GitHub GenericJam/bezalel, public) | the app; `data/` builds the study packs | — |
+| **bezalel** (this, GitHub GenericJam/bezalel, public) | the phone app; `data/` builds the study packs | — |
+| **bezalel_core** (GenericJam/bezalel_core) | the study tools, their pack access, the corpus registry and the system prompt, shared with the website (bezalel_ca); the fixture packs | GitHub, pinned (`sibling/3`) |
 | **mob_bezalel** (GenericJam/mob_bezalel) | the style package: themes, palette, fonts, UI composites | GitHub, pinned (`sibling/3`) |
 | **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn | Hex (`~> 0.1`, `sibling/2`) |
 | **mob_secure_store** (GenericJam/mob_secure_store) | Keychain / Keystore secrets plugin | GitHub, pinned until on Hex |
 | **mob_markdown** (GenericJam/mob_markdown) | native Markdown views (replies, tool results) | GitHub, pinned until on Hex |
 | mob, mob_dev | the framework | Hex |
 
-`BEZALEL_LOCAL_DEPS=1` uses the sibling checkouts (`../rho` etc.) instead of
-the pins and Hex; push the sibling, then bump the SHA (or, for rho, release
-it and bump the requirement). Study data is published to R2
-at https://bezalel.genericjam.com/packs/manifest.json (`data/README.md`).
+`BEZALEL_LOCAL_DEPS=1` uses the sibling checkouts (`../bezalel_core`,
+`../rho` etc.) instead of the pins and Hex; a comma-separated list
+(`BEZALEL_LOCAL_DEPS=bezalel_core`) uses just those. Push the sibling, then
+bump the SHA (or, for rho, release it and bump the requirement). Study data
+is published to R2 at https://bezalel.genericjam.com/packs/manifest.json
+(`data/README.md`). What lives where, and why:
+`decisions/2026-10-17-study-code-in-bezalel-core.md`.
 
 ## Issue tracking
 
@@ -112,9 +116,10 @@ Things that already bit this app. Not optional.
 
 1. **No compile-time `~r` regex in `lib/`.** A regex compiled into a module is
    tied to the OTP that compiled it; phones run another. Compile at run time
-   (`Bezalel.Study.Patterns`, cached in `:persistent_term` under a key that
+   (`Bezalel.Agent.Patterns` here, bezalel_core's `Bezalel.Study.Patterns`
+   for the study tools: cached in `:persistent_term` under a key that
    includes a hash of the sources so a hot load picks up changes). The
-   pre-commit hook and CI reject new ones.
+   pre-commit hook and CI reject new ones, here and in bezalel_core.
 2. **Commit with a pathspec** (Worktrees above).
 3. **Tests that change global state are not async.** `Application.put_env`,
    `System.put_env`, `:persistent_term`, the shared in-memory credential store
@@ -298,13 +303,15 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
 
 ## The app
 
-- mob_secure_store, mob_bezalel and mob_markdown are GitHub deps pinned to
-  commits in `mix.exs` (`sibling/3`), so a fresh clone builds; rho comes from
-  Hex (`sibling/2`). To work on one alongside the app, run with
-  `BEZALEL_LOCAL_DEPS=1` (uses `../rho`, `../mob_secure_store`,
-  `../mob_bezalel`, `../mob_markdown`); once the change is pushed, bump the
-  pinned commit, or for rho release it (its release workflow publishes on a
-  `@version` bump, with Kevin's OK) and bump the requirement if needed.
+- bezalel_core, mob_secure_store, mob_bezalel and mob_markdown are GitHub
+  deps pinned to commits in `mix.exs` (`sibling/3`), so a fresh clone
+  builds; rho comes from Hex (`sibling/2`). To work on one alongside the
+  app, run with `BEZALEL_LOCAL_DEPS=1` (uses `../bezalel_core`, `../rho`,
+  `../mob_secure_store`, `../mob_bezalel`, `../mob_markdown`) or a list of
+  just those you have checked out (`BEZALEL_LOCAL_DEPS=bezalel_core`); once
+  the change is pushed, bump the pinned commit, or for rho release it (its
+  release workflow publishes on a `@version` bump, with Kevin's OK) and bump
+  the requirement if needed.
 
 - `Bezalel.AppScreen` is the whole app: Study, Conversations, Workshop (and a
   built tool), Settings under one top bar and tab bar, plus the sheets and the
@@ -330,11 +337,19 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   sample). Models: `Bezalel.Models` (rho's catalog for the providers the
   user has access to; a model id is its req_llm spec). Sign-ins, API keys
   and token usage: `Bezalel.Account`, over rho.
-- **Study tools** (`Bezalel.Study.*`): studybible-mcp's tools ported to
-  Elixir as rho tool modules over the study packs (`data/`), with the
-  system prompt (`Bezalel.Study.Prompt`); the live agent runs them. How
-  they were ported, the pack access, the fixtures and the differences from
-  studybible-mcp: `docs/study_tools.md`.
+- **Study tools** (`Bezalel.Study.*`, in **bezalel_core**): studybible-mcp's
+  tools ported to Elixir as rho tool modules over the study packs
+  (`data/`), with the system prompt (`Bezalel.Study.Prompt`); the live agent
+  runs them. They know nothing of Mob: the app names the packs directory
+  through `config :bezalel_core, :packs_dir`
+  (`{Bezalel.Packs.Storage, :packs_dir, []}`). Their tests and the fixture
+  packs (cut here by `data/scripts/make_fixtures.py`, written into
+  `../bezalel_core`) are bezalel_core's; this app's tests read the fixtures
+  from the dependency (`test/test_helper.exs`). `Bezalel.App.load_core/0`
+  loads them before rho starts, so rho's Dyn Core digest counts them (it
+  only knows the `:bezalel` app's own modules). How they were ported, the
+  pack access and the differences from studybible-mcp: bezalel_core's
+  `docs/study_tools.md`.
 - **rho** (GenericJam/rho, on Hex, https://hexdocs.pm/rho) is the agent core:
   `Rho.Supervisor` starts in `Bezalel.App.on_start`, configured in
   `config/config.exs` (`config :rho`: data dir from `Mob.data_dir/0`, the
@@ -415,8 +430,9 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   https://bezalel.genericjam.com/packs/manifest.json (`data/README.md`,
   "Publish") into `packs` under the app support directory (iOS
   `Library/Application Support/packs`, excluded from iCloud backup; Android
-  `files/packs`), where the tools read them; `Bezalel.Study.DB.dir/0` names
-  it, and `Bezalel.Packs.Storage` moves what older builds left in
+  `files/packs`), where the tools read them; `Bezalel.Packs.Storage.packs_dir/0`
+  names it (bezalel_core's `Bezalel.Study.DB.dir/0` returns it), and
+  `Bezalel.Packs.Storage` moves what older builds left in
   `Documents/packs` at startup. On
   first launch a sheet offers the core pack (26 MB download, 182 MB on the
   phone); Settings → Study library downloads, updates ("Check for

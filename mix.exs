@@ -41,8 +41,13 @@ defmodule Bezalel.MixProject do
         "075ef619fc50e18e8482400c6f13304f93264f4e"
       ),
       {:ecto_sqlite3, "~> 0.18"},
-      # The study packs are read with Exqlite directly (Bezalel.Study.DB).
-      {:exqlite, "~> 0.42"},
+      # The study tools, their pack access and the system prompt, shared with
+      # the website (bezalel_ca). Unreleased: pinned to a commit.
+      sibling(
+        :bezalel_core,
+        "GenericJam/bezalel_core",
+        "1974de9c282b6d243c5024f06be6ee2756edefb8"
+      ),
       # The agent core: models, sign-in, usage, Dyn.
       sibling(:rho, "~> 0.1"),
       # The platform secure store (Keychain / Keystore) rho keeps the
@@ -91,18 +96,25 @@ defmodule Bezalel.MixProject do
 
   # A dependency developed alongside Bezalel. Unreleased ones come from
   # GitHub, pinned to a commit, so a fresh clone builds; released ones from
-  # Hex. BEZALEL_LOCAL_DEPS=1 uses the sibling checkouts (../rho,
+  # Hex. BEZALEL_LOCAL_DEPS uses sibling checkouts (../bezalel_core, ../rho,
   # ../mob_secure_store, ../mob_bezalel, ../mob_markdown) instead, for
-  # working on them.
+  # working on them: 1 (or true) for all of them, or a comma-separated list
+  # of apps (BEZALEL_LOCAL_DEPS=bezalel_core,rho) for just those.
   defp sibling(app, requirement) do
-    if local_deps?(), do: {app, path: "../#{app}", override: true}, else: {app, requirement}
+    if local_dep?(app), do: {app, path: "../#{app}", override: true}, else: {app, requirement}
   end
 
   defp sibling(app, repo, ref) do
-    if local_deps?(),
+    if local_dep?(app),
       do: {app, path: "../#{app}", override: true},
       else: {app, github: repo, ref: ref}
   end
 
-  defp local_deps?, do: System.get_env("BEZALEL_LOCAL_DEPS") in ["1", "true"]
+  defp local_dep?(app) do
+    case System.get_env("BEZALEL_LOCAL_DEPS") do
+      nil -> false
+      all when all in ["1", "true"] -> true
+      apps -> Atom.to_string(app) in String.split(apps, ",", trim: true)
+    end
+  end
 end

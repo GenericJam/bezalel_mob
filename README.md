@@ -19,7 +19,9 @@ Exodus 31:2–3 (BSB)
   pi's agent core running on the phone.
 - The study tools are an Elixir port of
   [studybible-mcp](https://github.com/djayatillake/studybible-mcp) (MIT),
-  called directly rather than over MCP. See [docs/study_tools.md](docs/study_tools.md).
+  called directly rather than over MCP. They live in
+  [bezalel_core](https://github.com/GenericJam/bezalel_core), shared with
+  the website; see its `docs/study_tools.md`.
 - The study database is built from studybible-mcp's pipeline at a pinned
   commit and downloaded by the app in packs. Sources, licences and the
   attributions the app shows: [data/SOURCES.md](data/SOURCES.md); how to
