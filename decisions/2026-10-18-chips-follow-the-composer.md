@@ -26,9 +26,14 @@ deletable straight from the Materials grid, not only from its detail.
 - **A question whose materials were being made ready when the user moved
   on** isn't sent (it was for the conversation left), and its chips come
   back to the composer where they are now, before anything added
-  meanwhile; its words come back only in its own conversation. The same
-  when its materials couldn't be made ready. A question asked again
-  (Try again) is unchanged: it keeps its Try again in its conversation.
+  meanwhile, with a toast saying so; its words come back only in its own
+  conversation. The same when its materials couldn't be made ready. If
+  the user is back in its conversation by the time they're ready, it goes:
+  it's where they asked it, and nothing else of theirs was sent meanwhile.
+  A material deleted while they were made ready stops the question (it
+  comes back as for any material not found), even if its attachment was
+  already built. A question asked again (Try again) is unchanged: it keeps
+  its Try again in its conversation.
 - **"Went with" means sent with.** A material picked from the + menu is no
   longer linked to the conversation open when it was added, only to the
   one its question goes to (`Study.send_prepared/5` links it). A still
@@ -42,10 +47,11 @@ deletable straight from the Materials grid, not only from its detail.
   it back).
 - **Deleting a material drops its chip**, and the chips of what's deleted
   with it (a video's stills, its transcript): every chip whose material is
-  gone after the delete.
+  gone after the delete, also among a question's chips coming back.
 - **The grid's ×**: each card in the Materials tab has an × over its
-  top-right corner (36 pt target, a 26 pt round badge on `:surface` so it
-  reads over a picture). It asks the same question as the detail's Delete
+  top-right corner (a 40 pt target with button role and a "Delete <name>"
+  label, a 26 pt round badge on `:surface` so it reads over a picture).
+  It asks the same question as the detail's Delete
   (the `{:delete_material, id}` sheet, "Keep it" backs out), then deletes
   the same way (`MaterialStore.delete/1`: its transcripts, audio tracks and
   stills made from it alone; a drawing made from it stays). No Undo, as for
@@ -59,3 +65,8 @@ deletable straight from the Materials grid, not only from its detail.
 - `Bezalel.Views.Attach.kept/2` and `handle_async({:keep, ref}, …)` no
   longer carry a conversation id; `Study.send_prepared/5` keeps its
   moved-on check only for a question asked again.
+- The website (bezalel_ca, same day) has the same rule with three
+  differences: its chips survive a reload (kept per user); a question
+  left before its files were ready stays in its own conversation for Try
+  again rather than giving its chips back; and its grid × deletes at once
+  with an Undo toast, as its detail's Delete does there.

@@ -107,11 +107,12 @@ defmodule Bezalel.Views.Materials do
       {tile(m, assigns)}
       <Box
         id={"delete-material-" <> m.id}
-        width={36}
-        height={36}
+        width={40}
+        height={40}
         align="center"
         fill_width={false}
         accessibility_label={"Delete " <> m.name}
+        accessibility_role="button"
         on_tap={delete}
       >
         <Box

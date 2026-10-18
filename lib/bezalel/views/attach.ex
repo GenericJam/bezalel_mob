@@ -745,13 +745,20 @@ defmodule Bezalel.Views.Attach do
   @doc """
   The question's attachments are ready (`handle_async({:prepare, _}, …)`).
   A new question goes only to the conversation it was asked in: if the user
-  has moved on, it isn't sent and its chips come back to the composer.
+  has moved on, it isn't sent and its chips come back to the composer
+  (one back in its conversation by then is sent). A material deleted while
+  they were made ready isn't sent: the question goes back as for any
+  material not found.
   """
   def prepared(result, %{assigns: %{preparing: %{} = p}} = socket) do
     socket = Socket.assign(socket, :preparing, nil)
     moved_on? = p.mode != :again and socket.assigns.conversation.id != p.cid
+    gone = Enum.find(p.materials, &(MaterialStore.fetch(&1.id, %{}) == :error))
 
     case result do
+      {:ok, {:ok, _atts}} when gone != nil ->
+        not_sent(socket, p, {:not_found, gone.id})
+
       {:ok, {:ok, _atts}} when moved_on? ->
         socket |> chips_back(p) |> Helpers.toast(@moved_on)
 

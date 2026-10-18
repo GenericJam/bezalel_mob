@@ -14,7 +14,7 @@ defmodule Bezalel.MaterialsScreenTest do
   alias Bezalel.Library.{Conversation, Tool}
   alias Bezalel.MaterialStore.{Link, Row}
   alias Bezalel.Test.{FakeLLM, MemoryStore, Native, Png, Whisper}
-  alias Bezalel.Views.Study
+  alias Bezalel.Views.{Attach, Study}
   alias Mob.Screen.Async
   alias MobMedia.PCM
   alias ReqLLM.Message.ContentPart
@@ -483,6 +483,27 @@ defmodule Bezalel.MaterialsScreenTest do
       assert assigns(view).preparing == nil
       assert assigns(view).attachments == []
       assert assigns(view).draft == "Watch"
+    end
+
+    test "a material deleted after its question's attachments were made ready isn't sent" do
+      view = AppScreen |> mount_screen() |> take_photo()
+      [photo] = assigns(view).attachments
+      view = view |> render_info({:change, :draft, "Look"}) |> tap({:study, :send})
+      assert %{materials: [_]} = assigns(view).preparing
+
+      # The attachments are made ready before the delete is confirmed …
+      ready = Attach.attachments([photo.id], [:text, :image], %{})
+      view = tap(view, {:materials, {:confirm_delete, photo.id}})
+
+      # … and arrive after it.
+      cid = assigns(view).conversation.id
+      {:noreply, socket} = AppScreen.handle_async({:prepare, cid}, {:ok, ready}, view.socket)
+      view = %{view | socket: socket}
+
+      assert assigns(view).preparing == nil
+      refute Enum.any?(assigns(view).messages, &(&1.text == "Look"))
+      assert assigns(view).attachments == []
+      assert assigns(view).draft == "Look"
     end
 
     test "sending while a recording is transcribed waits for that transcript, not a second one" do
