@@ -69,7 +69,8 @@ defmodule Bezalel.App do
   end
 
   @doc """
-  Loads bezalel_core's modules (the study tools and what they use). rho's
+  Loads bezalel_core's modules (the study tools, the agent's surface and
+  what they use). rho's
   Dyn layer fixes its Core digest when it boots (`Rho.Dyn.Compiler.runtime/0`),
   from the host app's modules (`config :rho, :dyn, app: :bezalel`) plus the
   loaded ones under `Bezalel.`. The study code is bezalel_core's, so it's

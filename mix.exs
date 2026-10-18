@@ -41,12 +41,13 @@ defmodule Bezalel.MixProject do
         "075ef619fc50e18e8482400c6f13304f93264f4e"
       ),
       {:ecto_sqlite3, "~> 0.18"},
-      # The study tools, their pack access and the system prompt, shared with
-      # the website (bezalel_ca). Unreleased: pinned to a commit.
+      # The study tools, their pack access, the system prompt and the agent's
+      # surface (reply blocks, passage card, transcript), shared with the
+      # website (bezalel_ca). Unreleased: pinned to a commit.
       sibling(
         :bezalel_core,
         "GenericJam/bezalel_core",
-        "80391aaa5e8f8ac628b46788bd751129543d03c9"
+        "6ce7853049b475b76e9cc9a8c25b08fe2ee94c01"
       ),
       # The agent core: models, sign-in, usage, Dyn.
       sibling(:rho, "~> 0.1"),

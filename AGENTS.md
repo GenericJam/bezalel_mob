@@ -17,7 +17,7 @@ Muster) applies on top.
 | Repo | What | Where it comes from in `mix.exs` |
 |---|---|---|
 | **bezalel_mob** (this, GitHub GenericJam/bezalel_mob, public; was GenericJam/bezalel) | the phone app; `data/` builds the study packs | — |
-| **bezalel_core** (GenericJam/bezalel_core) | the study tools, their pack access, the corpus registry and the system prompt, shared with the website (bezalel_ca); the fixture packs | GitHub, pinned (`sibling/3`) |
+| **bezalel_core** (GenericJam/bezalel_core) | the study tools, their pack access, the corpus registry and the system prompt; the agent's surface (reply fold, passage card, transcript reading and branch moves); shared with the website (bezalel_ca); the fixture packs | GitHub, pinned (`sibling/3`) |
 | **mob_bezalel** (GenericJam/mob_bezalel) | the style package: themes, palette, fonts, UI composites | GitHub, pinned (`sibling/3`) |
 | **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn | Hex (`~> 0.1`, `sibling/2`) |
 | **mob_secure_store** (GenericJam/mob_secure_store) | Keychain / Keystore secrets plugin | GitHub, pinned until on Hex |
@@ -117,8 +117,8 @@ Things that already bit this app. Not optional.
 
 1. **No compile-time `~r` regex in `lib/`.** A regex compiled into a module is
    tied to the OTP that compiled it; phones run another. Compile at run time
-   (`Bezalel.Agent.Patterns` here, bezalel_core's `Bezalel.Study.Patterns`
-   for the study tools: cached in `:persistent_term` under a key that
+   (in bezalel_core: `Bezalel.Study.Patterns` for the study tools,
+   `Bezalel.Agent.Patterns` for replies and cards: cached in `:persistent_term` under a key that
    includes a hash of the sources so a hot load picks up changes). The
    pre-commit hook and CI reject new ones, here and in bezalel_core.
 2. **Commit with a pathspec** (Worktrees above).
@@ -319,7 +319,7 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   toast. It holds the state; each tab's view and events are in
   `lib/bezalel/views/`. Events are `{:tap, {tab, event}}` tuples routed there.
 - Data: `Bezalel.Library`: each conversation's transcript is its rho
-  session (JSONL in `Rho.Session.dir/0`, read by
+  session (JSONL in `Rho.Session.dir/0`, read by bezalel_core's
   `Bezalel.Library.Transcript`; Delete and Undo are branch moves), SQLite
   keeps the shelf (name, kind, kicker, session id and file, message count)
   and the built tools; seeds the design's Exodus 31 study on first run.
@@ -389,9 +389,11 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   what earlier loops sent and got), released when the conversation is left,
   before Bezalel writes the session itself (a delete or undo, a question
   asked again), when a reply is stopped or fails, or the screen mounts.
-  Its events stream into `Bezalel.Agent.Reply` (THINKING / TOOL CALL /
-  SUMMARY, the passage card from `lookup_verse` / `word_study`'s data,
-  `Bezalel.Agent.Card`) in `Bezalel.Views.Study`: stop button while it
+  Its events stream into bezalel_core's `Bezalel.Agent.Reply` (THINKING /
+  TOOL CALL / SUMMARY, the passage card from `lookup_verse` / `word_study`'s
+  data, `Bezalel.Agent.Card`; pure, shared with the website,
+  decisions/2026-10-17-agent-surface-in-bezalel-core.md) in
+  `Bezalel.Views.Study`: stop button while it
   streams, a message sent meanwhile steers it, errors stay as a card with
   Try again (and Open Settings for sign-in problems). Without a credential,
   replies are the design's storyboard (`Bezalel.Agent.Storyboard`), and
