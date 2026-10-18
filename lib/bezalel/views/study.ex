@@ -24,7 +24,7 @@ defmodule Bezalel.Views.Study do
   alias Bezalel.{Agent, Library, MaterialStore, Models, Native, Scripture}
   alias Bezalel.Agent.{Card, Reply, Storyboard}
   alias Bezalel.Study.{DB, Lexicon}
-  alias Bezalel.Views.{Attach, Helpers, Images}
+  alias Bezalel.Views.{Attach, Helpers, Images, Sources}
   alias Bezalel.Views.Materials, as: MaterialsView
   alias Mob.Socket
   alias MobBezalel.{Icons, UI}
@@ -179,6 +179,7 @@ defmodule Bezalel.Views.Study do
       {Images.render(m.images, assigns)}
       {MaterialsView.in_message(m.materials, assigns)}
       {image(m)}
+      {Sources.render(m.id, m.citations, assigns.expanded)}
       {actions(m, assigns, Models.attribution(m.model))}
     </Column>
     """
@@ -200,6 +201,7 @@ defmodule Bezalel.Views.Study do
       {card(r.card)}
       {Images.render(r.images, assigns)}
       {MaterialsView.in_message(r.materials, assigns)}
+      {Sources.render(pseudo.id, Reply.sources(r), assigns.expanded)}
       {pending}
       {failure(r)}
     </Column>
@@ -627,10 +629,16 @@ defmodule Bezalel.Views.Study do
     end
   end
 
+  # Expand all opens every block and leaves open sources lists open;
+  # Collapse all closes everything.
   def handle(:toggle_all, socket) do
     keys = all_block_keys(socket.assigns)
-    all_open? = keys != [] and Enum.all?(keys, &MapSet.member?(socket.assigns.expanded, &1))
-    expanded = if all_open?, do: MapSet.new(), else: MapSet.new(keys)
+    expanded = socket.assigns.expanded
+    all_open? = keys != [] and Enum.all?(keys, &MapSet.member?(expanded, &1))
+
+    expanded =
+      if all_open?, do: MapSet.new(), else: MapSet.union(expanded, MapSet.new(keys))
+
     {:noreply, Socket.assign(socket, :expanded, expanded)}
   end
 
@@ -741,7 +749,7 @@ defmodule Bezalel.Views.Study do
     {:noreply, socket |> Socket.assign(desc: desc, build: nil) |> Helpers.go(:workshop)}
   end
 
-  # A link in the chat (the NET's label on a passage card).
+  # A link in the chat (the NET's label on a passage card, a reply's sources).
   def handle({:open_url, url}, socket) do
     Rho.Config.open_url(url)
     {:noreply, socket}

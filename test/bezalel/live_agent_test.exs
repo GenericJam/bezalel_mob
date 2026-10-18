@@ -117,11 +117,12 @@ defmodule Bezalel.LiveAgentTest do
     assert text(view) =~ "Tap a highlighted word for the original"
     # The translation it quotes (the NET, the default, from the fixture
     # translations pack), labelled; "(NET)" follows the last verse, linked
-    # to netbible.org, as the NET's terms ask.
+    # to the first verse's page at netbible.org, as the NET's terms ask.
     assert card["version"] == "NET"
-    assert card["version_url"] == "http://netbible.org"
+    net_url = "https://netbible.org/bible/Exodus+31:2"
+    assert card["version_url"] == net_url
     assert "NET" in texts(view)
-    net = {:study, {:open_url, "http://netbible.org"}}
+    net = {:study, {:open_url, net_url}}
     assert %{props: %{on_tap: {_, ^net}}} = find(view, :text, text: "(NET)")
 
     [last_verse] =
@@ -129,7 +130,7 @@ defmodule Bezalel.LiveAgentTest do
 
     assert List.last(last_verse.children).props.text == "(NET)"
     render_info(view, {:tap, net})
-    assert Browser.last() == "http://netbible.org"
+    assert Browser.last() == net_url
 
     view = until(view, &match?(%{type: :message_update, delta: "Bezalel is "}, &1))
     assert block(Reply.blocks(stream(view)), "SUMMARY")["first"] == "Bezalel is"
