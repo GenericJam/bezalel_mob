@@ -175,42 +175,6 @@ defmodule Bezalel.SettingsTest do
     end
   end
 
-  describe "token usage" do
-    test "zero before any model call" do
-      assert text(settings()) =~ "0 tokens"
-    end
-
-    test "today and total per model, from rho's usage" do
-      today = Date.to_iso8601(Rho.Budget.today())
-      counters = fn input, output -> %{"requests" => 1, "input" => input, "output" => output} end
-
-      usage = %{
-        "days" => %{today => %{"anthropic:claude-haiku-4-5-20251001" => counters.(800, 400)}},
-        "total" => %{
-          "anthropic:claude-haiku-4-5-20251001" => counters.(9_000, 3_400),
-          "google:gemini-3.5-flash" => counters.(300, 200),
-          # An alias of the catalog's dated id (counted with it), and a model
-          # the catalog no longer lists (shown by its spec).
-          "anthropic:claude-haiku-4-5" => counters.(50, 50),
-          "anthropic:claude-2" => counters.(10, 0)
-        }
-      }
-
-      File.write!(Path.join(Rho.Config.data_dir(), "usage.json"), Jason.encode!(usage))
-      view = settings() |> render_info({:rho_usage, :changed})
-      t = text(view)
-
-      assert t =~ "13k tokens across 3 models"
-      assert t =~ "1.2k today"
-      assert t =~ "Claude Haiku 4.5 1.2k today · 12.5k"
-      assert t =~ "Gemini 3.5 Flash 0 today · 500"
-      assert t =~ "anthropic:claude-2 0 today · 10"
-      [_, usage] = String.split(t, "TOKEN USAGE")
-      refute usage =~ "Sonnet"
-      assert_renderable(view)
-    end
-  end
-
   describe "study" do
     test "translation, results per list and scripture labels: the defaults, then each persists across a re-mount" do
       view = settings()

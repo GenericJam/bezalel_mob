@@ -378,7 +378,23 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   (`Mob.State`; the study preferences too, below). Scripture and lexicon: `Bezalel.Scripture` (Exodus 31
   sample). Models: `Bezalel.Models` (rho's catalog for the providers the
   user has access to; a model id is its req_llm spec). Sign-ins, API keys
-  and token usage: `Bezalel.Account`, over rho.
+  and rho's usage record: `Bezalel.Account`, over rho.
+- **Usage** (`Bezalel.Views.Usage`, over bezalel_core's `Bezalel.Usage`;
+  decisions/2026-10-18-usage-on-the-phone.md): the `usage` assign is rho's
+  record (`Account.usage/0`), re-read on every `{:rho_usage, :changed}`.
+  Settings → Usage shows per signed-in provider a subscription's windows
+  (percent, resets in, plan, Refresh: `Account.refresh_usage/1`, the
+  usage endpoints, off the screen in `start_async`) or an API key's spend
+  today and this week with its billing page, and tokens per model today
+  and this week. Study's composer carries the meter (model, fullest
+  window or spend today; amber from 80 %, red when used up; taps to
+  Settings); a reply's ⋯ shows its tokens and cost (`Message.usage`). A
+  question that can't go (no credential, a limit used up:
+  `Bezalel.Usage.preflight/3`) fails before it's sent; every failed
+  reply's card is `Bezalel.Usage.explain/2` with the button for its
+  action (Choose a model, Billing page, Open Settings). Host tests:
+  `test/bezalel/usage_screen_test.exs` (usage.json written in the run's
+  data dir; Refresh answered through `config :bezalel, :usage_fetch`).
 - **Study tools** (`Bezalel.Study.*`, in **bezalel_core**): studybible-mcp's
   tools ported to Elixir as rho tool modules over the study packs
   (`data/`), with the system prompt (`Bezalel.Study.Prompt`); the live agent
@@ -436,7 +452,7 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   decisions/2026-10-17-agent-surface-in-bezalel-core.md) in
   `Bezalel.Views.Study`: stop button while it
   streams, a message sent meanwhile steers it, errors stay as a card with
-  Try again (and Open Settings for sign-in problems). Without a credential,
+  Try again and what to do (Usage, above). Without a credential,
   replies are the design's storyboard (`Bezalel.Agent.Storyboard`), and
   Settings and Study say so. Tests drive Live with a scripted model
   (`test/support/fake_llm.ex`, `test/bezalel/live_agent_test.exs`). Study's

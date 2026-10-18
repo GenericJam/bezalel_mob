@@ -3,14 +3,15 @@ defmodule Bezalel.Views.Settings do
   The Settings tab: account, appearance, model, study (translation,
   results per list, scripture labels, and the approach and sources
   screens, `Bezalel.ApproachScreen` and `Bezalel.StudySourcesScreen`), the
-  study library (`Bezalel.Views.StudyLibrary`), usage, what's on the
-  phone.
+  study library (`Bezalel.Views.StudyLibrary`), usage
+  (`Bezalel.Views.Usage`), what's on the phone.
   """
   import Mob.Sigil
 
   alias Bezalel.{Account, Agent, Models, Settings}
   alias Bezalel.Study.{Sources, Translations}
   alias Bezalel.Views.{Helpers, StudyLibrary}
+  alias Bezalel.Views.Usage, as: UsageView
   alias Mob.Socket
   alias MobBezalel.{Palette, UI}
   alias Rho.Auth
@@ -52,8 +53,6 @@ defmodule Bezalel.Views.Settings do
         gap: 10
       )
 
-    usage = usage(assigns.usage)
-
     on_phone =
       UI.card(
         [
@@ -73,7 +72,7 @@ defmodule Bezalel.Views.Settings do
       section("Study", study(assigns)),
       section("Voice", voice(assigns)),
       section("Study library", StudyLibrary.render(assigns)),
-      section("Token usage", [usage]),
+      section("Usage", UsageView.settings(assigns)),
       section("On this phone", [on_phone]),
       section("Design", [
         UI.pill_button("Design specimen", gallery_tap, :outline,
@@ -421,98 +420,6 @@ defmodule Bezalel.Views.Settings do
     end
   end
 
-  defp usage([]) do
-    UI.card(
-      [
-        ~MOB"""
-        <Row gap={8} align={:end}>
-          <Text text="0" font={:display} text_size={30} text_color={:on_surface} />
-          <Text text="tokens" text_size={12} text_color={:muted} />
-        </Row>
-        """,
-        ~MOB(<Text
-  text="No model calls yet. Usage per model shows here once a model answers."
-  text_size={13}
-  line_height={1.45}
-  text_color={:muted}
-/>)
-      ],
-      padding: 16,
-      gap: 8
-    )
-  end
-
-  defp usage(rows) do
-    total = rows |> Enum.map(& &1.total) |> Enum.sum()
-    today = rows |> Enum.map(& &1.today) |> Enum.sum()
-
-    across =
-      case rows do
-        [_] -> "tokens across 1 model"
-        _ -> "tokens across #{length(rows)} models"
-      end
-
-    per_model =
-      for r <- rows do
-        {name, dot} = usage_label(r.model)
-        figures = "#{tokens(r.today)} today · #{tokens(r.total)}"
-
-        ~MOB"""
-        <Column gap={5} fill_width={true}>
-          <Row fill_width={true}>
-            <Text text={name} font={:ui_medium} text_size={13} text_color={:on_surface} weight={1} />
-            <Text text={figures} text_size={13} text_color={:muted} />
-          </Row>
-          {UI.meter(if(total > 0, do: r.total / total, else: 0.0), dot)}
-        </Column>
-        """
-      end
-
-    UI.card(
-      [
-        ~MOB"""
-        <Row gap={8} align={:end}>
-          <Text text={tokens(total)} font={:display} text_size={30} text_color={:on_surface} />
-          <Text text={across} text_size={12} text_color={:muted} />
-        </Row>
-        """,
-        note("#{tokens(today)} today")
-        | per_model
-      ],
-      padding: 16,
-      gap: 12
-    )
-  end
-
-  # Usage is kept under the spec a call used: the catalog's name for it, or
-  # the spec itself for a model the catalog no longer lists.
-  defp usage_label(spec) do
-    case Models.lookup(spec) do
-      %{name: name, dot: dot} ->
-        {name, dot}
-
-      nil ->
-        provider =
-          case Auth.provider_for_model(spec) do
-            {:ok, provider} -> provider
-            :error -> nil
-          end
-
-        {spec, Models.dot(provider) || :muted}
-    end
-  end
-
-  @doc "A token count as Settings shows it: `950`, `12.4k`, `1.2M`."
-  @spec tokens(non_neg_integer()) :: String.t()
-  def tokens(n) when n < 1000, do: Integer.to_string(n)
-  def tokens(n) when n < 1_000_000, do: short(n / 1000) <> "k"
-  def tokens(n), do: short(n / 1_000_000) <> "M"
-
-  defp short(x) when x >= 100, do: x |> round() |> Integer.to_string()
-
-  defp short(x),
-    do: x |> Float.round(1) |> :erlang.float_to_binary(decimals: 1) |> String.trim_trailing(".0")
-
   defp model_row(model, account, tap) do
     note =
       if Models.available?(model, account),
@@ -619,6 +526,14 @@ defmodule Bezalel.Views.Settings do
     end
   end
 
+  def handle(:refresh_usage, socket), do: {:noreply, UsageView.refresh_usage(socket)}
+
+  # A provider's billing page (Usage, a failed reply's card).
+  def handle({:open_url, url}, socket) do
+    Rho.Config.open_url(url)
+    {:noreply, socket}
+  end
+
   def handle(:gallery, socket),
     do: {:noreply, Socket.push_screen(socket, Bezalel.DesignGalleryScreen)}
 
@@ -686,9 +601,6 @@ defmodule Bezalel.Views.Settings do
 
   @doc "Re-reads the sign-ins and API keys (after a change here or anywhere)."
   def refresh(socket), do: Socket.assign(socket, :account, Account.status())
-
-  @doc "Re-reads the token usage."
-  def refresh_usage(socket), do: Socket.assign(socket, :usage, Account.usage())
 
   # Sign-out and key removal: the provider's one credential goes.
   defp forget(socket, provider) do

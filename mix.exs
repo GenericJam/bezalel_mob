@@ -50,7 +50,7 @@ defmodule Bezalel.MixProject do
       sibling(
         :bezalel_core,
         "GenericJam/bezalel_core",
-        "b77c91514d37e766e42a1391b210e381e4416758"
+        "39b233f946af0468ce1374b2fdc0eaa6d0ae8b96"
       ),
       # The agent core: models, sign-in, usage, Dyn; attachments by reference
       # (Materials) from 0.2.

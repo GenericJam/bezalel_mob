@@ -14,7 +14,9 @@ defmodule Bezalel.Views.Study do
   the session as it goes. A message sent while it streams steers it; once
   the loop takes it in, the reply so far shows from the session, then the
   message, and the rest streams as the next reply. A failed reply stays as
-  its error, with Try again (the question asked anew). A delete or undo
+  its error explained, with Try again (the question asked anew) and what
+  to do; the usage meter sits above the composer (`Bezalel.Views.Usage`).
+  A delete or undo
   made while a reply streams in that conversation waits for it to end (the
   loop holds the session), the deleted message hidden meanwhile
   (`edits`).
@@ -26,6 +28,7 @@ defmodule Bezalel.Views.Study do
   alias Bezalel.Study.{DB, Lexicon}
   alias Bezalel.Views.{Attach, Helpers, Images, Sources}
   alias Bezalel.Views.Materials, as: MaterialsView
+  alias Bezalel.Views.Usage, as: UsageView
   alias Mob.Socket
   alias MobBezalel.{Icons, UI}
   alias Rho.Session
@@ -53,7 +56,11 @@ defmodule Bezalel.Views.Study do
     hammer = Icons.icon(:hammer, 18, :secondary)
 
     stop = if Reply.running?(stream), do: [stop: {self(), {:study, :stop}}], else: []
-    composer_opts = stop ++ Attach.composer_opts(assigns)
+    # The usage meter heads what sits above the composer's field.
+    meter = UsageView.meter(assigns)
+
+    composer_opts =
+      Keyword.update(stop ++ Attach.composer_opts(assigns), :above, meter, &(meter ++ &1))
 
     ~MOB"""
     <Column weight={1} fill_width={true}>
@@ -203,7 +210,7 @@ defmodule Bezalel.Views.Study do
       {MaterialsView.in_message(r.materials, assigns)}
       {Sources.render(pseudo.id, Reply.sources(r), assigns.expanded)}
       {pending}
-      {failure(r)}
+      {UsageView.failure(r, assigns)}
     </Column>
     """
   end
@@ -222,37 +229,6 @@ defmodule Bezalel.Views.Study do
     </Column>
     """
   end
-
-  defp failure(%Reply{status: :error, error: error}) do
-    retry = {self(), {:study, :retry}}
-    settings = {self(), {:tab, :settings}}
-    button_opts = [height: 40, fill: false, text_size: 13]
-
-    buttons =
-      [UI.pill_button("Try again", retry, :outline, button_opts)] ++
-        if (error || "") =~ "Settings",
-          do: [UI.pill_button("Open Settings", settings, :outline, button_opts)],
-          else: []
-
-    UI.card(
-      [
-        UI.kicker("No reply", :error),
-        ~MOB(<Text
-  text={error || "The reply failed."}
-  text_size={14}
-  line_height={1.5}
-  text_color={:on_surface}
-/>),
-        ~MOB(<Row gap={10} fill_width={true}>
-  {buttons}
-</Row>)
-      ],
-      padding: 16,
-      gap: 10
-    )
-  end
-
-  defp failure(_reply), do: []
 
   defp block(message, b, assigns) do
     key = Helpers.block_key(message, b)
@@ -456,11 +432,25 @@ defmodule Bezalel.Views.Study do
         do: name ++ speaker(m, assigns) ++ [tap_target | chips],
         else: chips ++ [tap_target]
 
-    ~MOB"""
+    row = ~MOB"""
     <Row gap={4} align={:center} fill_width={false}>
       {items}
     </Row>
     """
+
+    # An open reply's menu shows what it used: tokens and cost.
+    case if(open? and model_name, do: UsageView.reply_line(m), else: []) do
+      [] ->
+        row
+
+      line ->
+        ~MOB"""
+        <Column gap={4} fill_width={true}>
+          {row}
+          {line}
+        </Column>
+        """
+    end
   end
 
   # Read aloud: a reply with a summary has a speaker beside its ⋯; while
@@ -907,31 +897,31 @@ defmodule Bezalel.Views.Study do
     %{id: cid} = socket.assigns.conversation
     model = Helpers.model(socket)
 
-    if Models.available?(model, socket.assigns.account) do
-      case Agent.ask(cid, text, model.id, self(), attachments) do
-        {:ok, session_id} ->
-          :ok = Library.touch(cid)
-          link(attachments, session_id)
+    case UsageView.preflight(socket, model) do
+      :ok ->
+        case Agent.ask(cid, text, model.id, self(), attachments) do
+          {:ok, session_id} ->
+            :ok = Library.touch(cid)
+            link(attachments, session_id)
 
-          socket
-          |> Socket.assign(:sessions, Map.put(socket.assigns.sessions, session_id, cid))
-          |> put_stream(cid, Reply.new(cid, model.id, session_id))
+            socket
+            |> Socket.assign(:sessions, Map.put(socket.assigns.sessions, session_id, cid))
+            |> put_stream(cid, Reply.new(cid, model.id, session_id))
 
-        {:error, reason} ->
-          error = "The agent couldn't start: #{inspect(reason)}"
+          {:error, reason} ->
+            error = "The agent couldn't start: #{inspect(reason)}"
 
-          socket
-          |> keep_question(cid, text, attachments)
-          |> put_stream(cid, Reply.failed(cid, model.id, error))
-      end
-    else
-      error =
-        "#{model.name} needs a #{Models.needs(model.provider)}. Add one in Settings → " <>
-          "Account, or choose a model you have access to."
+            socket
+            |> keep_question(cid, text, attachments)
+            |> put_stream(cid, Reply.failed(cid, model.id, error))
+        end
 
-      socket
-      |> keep_question(cid, text, attachments)
-      |> put_stream(cid, Reply.failed(cid, model.id, error))
+      # No credential for the model, or its limit is used up: said
+      # before sending, with what to do.
+      {:error, socket, error} ->
+        socket
+        |> keep_question(cid, text, attachments)
+        |> put_stream(cid, Reply.failed(cid, model.id, error))
     end
   end
 

@@ -25,6 +25,7 @@ defmodule Bezalel.AppScreen do
 
   alias Bezalel.Views.Materials, as: MaterialsView
   alias Bezalel.Views.Settings, as: SettingsView
+  alias Bezalel.Views.Usage, as: UsageView
   alias Mob.Theme.AdaptiveWatcher
   alias MobBezalel.{Palette, UI}
   alias Rho.Auth.Login
@@ -79,7 +80,6 @@ defmodule Bezalel.AppScreen do
         model_id: Settings.model(),
         study: Settings.study_preferences(),
         account: Account.status(),
-        usage: Account.usage(),
         login: login,
         login_code: "",
         key_drafts: %{},
@@ -114,7 +114,9 @@ defmodule Bezalel.AppScreen do
         read_aloud: Settings.read_aloud?(),
         voice: Settings.voice()
       )
-      |> Mob.Socket.assign(Attach.assigns() ++ MaterialsView.assigns() ++ Stills.assigns())
+      |> Mob.Socket.assign(
+        Attach.assigns() ++ MaterialsView.assigns() ++ Stills.assigns() ++ UsageView.assigns()
+      )
       |> Helpers.open_conversation(conversation)
       |> StudyLibrary.mount()
 
@@ -302,8 +304,7 @@ defmodule Bezalel.AppScreen do
 
   def handle_info({:rho_auth, :changed}, socket), do: {:noreply, SettingsView.refresh(socket)}
 
-  def handle_info({:rho_usage, :changed}, socket),
-    do: {:noreply, SettingsView.refresh_usage(socket)}
+  def handle_info({:rho_usage, :changed}, socket), do: {:noreply, UsageView.reload(socket)}
 
   def handle_info({:bezalel_packs, event}, socket),
     do: {:noreply, StudyLibrary.event(event, socket)}
@@ -357,6 +358,9 @@ defmodule Bezalel.AppScreen do
     do: {:noreply, Study.lexicon(strongs, result, socket)}
 
   def handle_async(:build, result, socket), do: {:noreply, Workshop.built(result, socket)}
+
+  def handle_async(:usage_refresh, result, socket),
+    do: {:noreply, UsageView.refreshed(result, socket)}
 
   def handle_async({:keep, _ref}, result, socket), do: {:noreply, Attach.kept(result, socket)}
 
