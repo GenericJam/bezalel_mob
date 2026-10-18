@@ -458,6 +458,33 @@ defmodule Bezalel.MaterialsScreenTest do
       refute Enum.any?(assigns(view).messages, &(&1.text == "First"))
     end
 
+    test "a question that can't go doesn't give back chips deleted meanwhile, a video's stills too" do
+      Whisper.put_text("In the beginning")
+      bytes = "not really a video"
+      {:ok, video} = MaterialStore.put(Materials.new(bytes, name: "clip.mp4"), bytes, %{})
+      png = Png.solid(4, 4, {1, 1, 1})
+      {:ok, still} = MaterialStore.put(Materials.derive(:still, video, png, meta: %{}), png, %{})
+
+      view =
+        AppScreen
+        |> mount_screen()
+        |> tap({:materials, {:ask, video.id}})
+        |> tap({:materials, {:ask, still.id}})
+        |> render_info({:change, :draft, "Watch"})
+        |> tap({:study, :send})
+
+      assert %{materials: [_, _]} = assigns(view).preparing
+
+      view =
+        view
+        |> tap({:materials, {:confirm_delete, video.id}})
+        |> render_async()
+
+      assert assigns(view).preparing == nil
+      assert assigns(view).attachments == []
+      assert assigns(view).draft == "Watch"
+    end
+
     test "sending while a recording is transcribed waits for that transcript, not a second one" do
       Whisper.put_text("In the beginning")
 

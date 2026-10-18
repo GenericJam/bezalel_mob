@@ -95,19 +95,21 @@ defmodule Bezalel.Views.Materials do
     do: ~MOB(<Text text="None of this kind yet." text_size={14} text_color={:muted} />)
 
   # A grid card: the square, with an × over its top-right corner that
-  # deletes it (after the same question as the detail's Delete).
+  # deletes it (after the same question as the detail's Delete). The
+  # wrapper takes the square's own size (a fixed one would cut across a
+  # padded square's: padding sits outside a fixed size).
   defp grid_tile(m, assigns) do
     delete = {self(), {:materials, {:delete, m.id}}}
     x = Icons.icon(:close, 14, :on_surface)
 
     ~MOB"""
-    <Box width={104} height={104} align="top_trailing" fill_width={false}>
+    <Box align="top_trailing" fill_width={false}>
       {tile(m, assigns)}
       <Box
         id={"delete-material-" <> m.id}
         width={36}
         height={36}
-        padding={5}
+        align="center"
         fill_width={false}
         accessibility_label={"Delete " <> m.name}
         on_tap={delete}
@@ -160,6 +162,8 @@ defmodule Bezalel.Views.Materials do
     """
   end
 
+  # 84 inside its padding: Mob puts padding outside a fixed size, so the
+  # square is 104 like a picture's.
   defp tile(m, _assigns) do
     tap = {self(), {:materials, {:open, m.id}}}
     glyph = Icons.icon(Attach.icon(m.kind), 24, :secondary)
@@ -167,8 +171,8 @@ defmodule Bezalel.Views.Materials do
     ~MOB"""
     <Box
       id={"material-" <> m.id}
-      width={104}
-      height={104}
+      width={84}
+      height={84}
       corner_radius={12}
       background={:surface}
       border_color={:border}

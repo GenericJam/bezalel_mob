@@ -38,6 +38,9 @@ defmodule Bezalel.Views.Attach do
   # A file larger than this isn't kept: its bytes are read whole to name it.
   @max_bytes 250_000_000
 
+  # A new question isn't sent once the user has moved to another conversation.
+  @moved_on "That question wasn't sent: you'd moved on. Its materials are back above the question box."
+
   @doc "The assigns this view keeps, for the screen's mount."
   def assigns do
     [
@@ -750,11 +753,7 @@ defmodule Bezalel.Views.Attach do
 
     case result do
       {:ok, {:ok, _atts}} when moved_on? ->
-        socket
-        |> chips_back(p, nil)
-        |> Helpers.toast(
-          "That question wasn't sent: you'd moved on. Its materials are back above the question box."
-        )
+        socket |> chips_back(p) |> Helpers.toast(@moved_on)
 
       {:ok, {:ok, atts}} ->
         socket
@@ -800,19 +799,22 @@ defmodule Bezalel.Views.Attach do
       with %{base: base} = d <- socket.assigns.dictation, do: %{d | base: before(p.text, base)}
 
     socket
-    |> chips_back(p, reason)
+    |> chips_back(p)
     |> Socket.assign(draft: before(p.text, socket.assigns.draft), dictation: dictation)
     |> Helpers.toast(send_error(reason, p.mode, socket))
   end
 
-  defp not_sent(socket, p, reason),
-    do: socket |> chips_back(p, reason) |> Helpers.toast(send_error(reason, p.mode, socket))
+  defp not_sent(socket, p, reason) do
+    socket
+    |> chips_back(p)
+    |> Helpers.toast(@moved_on <> " " <> send_error(reason, p.mode, socket))
+  end
 
   # A question's chips back in the composer, before what was added meanwhile;
-  # a material deleted meanwhile (`{:not_found, id}`) doesn't come back.
-  defp chips_back(socket, p, reason) do
-    gone = with {:not_found, id} <- reason, do: id
-    chips = Enum.reject(p.materials, &(&1.id == gone))
+  # a material deleted meanwhile (and what went with it, a video's stills)
+  # doesn't come back.
+  defp chips_back(socket, p) do
+    chips = Enum.filter(p.materials, &match?({:ok, _}, MaterialStore.fetch(&1.id, %{})))
     known = MapSet.new(chips, & &1.id)
     added = Enum.reject(socket.assigns.attachments, &MapSet.member?(known, &1.id))
     Socket.assign(socket, :attachments, chips ++ added)
