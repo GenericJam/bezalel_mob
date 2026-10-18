@@ -475,8 +475,8 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   Septuagint, ancient sources, Dead Sea Scrolls (`scrolls`, from data
   version 2; decisions/2026-10-18-scrolls-pack-optional.md), people and
   places), shows storage used, and opens Sources and
-  licences (`Bezalel.AttributionsScreen`, from `data/SOURCES.md`; change
-  both together). `Bezalel.Packs` runs outside the screen: one download at
+  licences (`Bezalel.AttributionsScreen`, laying out bezalel_core's
+  `Bezalel.Study.Credits`, from `data/SOURCES.md`; change both together). `Bezalel.Packs` runs outside the screen: one download at
   a time, resumed with a Range request after a dropped connection or a
   restart, both checksums verified, the new file renamed over the old only
   once it verifies (`Bezalel.Packs.Download`). There is no background

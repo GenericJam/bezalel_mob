@@ -91,7 +91,8 @@ and `verse_comparison_scores` (LLM-assigned scores).
 
 ## Attribution the app must show
 
-The attributions screen (bead `bezalel-e47.6`) shows these, each with its link and
+The attributions screen (bead `bezalel-e47.6`; its data is bezalel_core's
+`Bezalel.Study.Credits`, edit it with this file) shows these, each with its link and
 licence link (https://creativecommons.org/licenses/by/4.0/,
 https://creativecommons.org/licenses/by-sa/4.0/,
 https://creativecommons.org/licenses/by-nc/4.0/; the Mishnah English is CC BY 3.0,
