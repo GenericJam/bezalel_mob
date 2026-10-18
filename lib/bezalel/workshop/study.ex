@@ -44,9 +44,10 @@ defmodule Bezalel.Workshop.Study do
 
   @doc """
   A passage ("John 3:16", "Ps 23", "Exodus 31:1-11"): `lookup_verse`'s
-  data, each verse with its English (BSB), its Hebrew or Greek and its
-  words, and a `label` as people write it ("Exodus 31:2"; `reference` is
-  the packs' "Exo.31.2"). At most 50 verses.
+  data, each verse with its English (the user's translation, which
+  `translation` names), its Hebrew or Greek and its words, and a `label`
+  as people write it ("Exodus 31:2"; `reference` is the packs'
+  "Exo.31.2"). At most 50 verses.
   """
   @spec passage(String.t()) :: {:ok, map()} | {:error, String.t()}
   def passage(reference) when is_binary(reference) do

@@ -66,6 +66,35 @@ defmodule Bezalel.Views.Helpers do
   @doc "How long a toast shows, in milliseconds: its Undo's window."
   def toast_ms, do: @toast_ms
 
+  @doc """
+  A toast's box over the screen: `text` and its `actions` (tappable
+  texts), `bottom` points above the screen's bottom edge; on iOS the root
+  runs under the home indicator, so its `inset` is added there.
+  """
+  def toast_box(text, actions, bottom, inset) do
+    ios = %{padding_bottom: bottom + inset}
+    o = MobBezalel.Palette.overlay()
+
+    ~MOB"""
+    <Box padding_left={16} padding_right={16} padding_bottom={bottom} ios={ios} fill_width={true}>
+      <Box
+        background={o.popover}
+        corner_radius={16}
+        padding_left={16}
+        padding_right={16}
+        padding_top={12}
+        padding_bottom={12}
+        fill_width={true}
+      >
+        <Row gap={12} align={:center} fill_width={true}>
+          <Text text={text} font={:ui_medium} text_size={13} text_color={o.on_popover} weight={1} />
+          {actions}
+        </Row>
+      </Box>
+    </Box>
+    """
+  end
+
   @doc "A chip in a ⋯ menu (Copy, Delete), in `color`."
   def action_chip(label, tap, color) do
     ~MOB"""
@@ -167,11 +196,35 @@ defmodule Bezalel.Views.Helpers do
   end
 
   defp release_unused(socket) do
-    %{sessions: sessions, streams: streams, conversation: %{id: open}} = socket.assigns
+    open = socket.assigns.conversation.id
+    release_idle(socket, &(&1 != open))
+  end
+
+  @doc """
+  After a study preference changes: the agent's loops go, the open
+  conversation's too, so the next question starts one with the new prompt
+  and tools (`Bezalel.Agent.Live`). A loop whose reply is still streaming
+  is marked stale instead and goes when its reply ends.
+  """
+  def release_idle(socket) do
+    %{sessions: sessions, streams: streams, stale: stale} = socket.assigns
+
+    running =
+      for cid <- Map.values(sessions), Reply.running?(streams[cid]), into: MapSet.new(), do: cid
+
+    socket
+    |> release_idle(fn _cid -> true end)
+    |> Socket.assign(:stale, MapSet.union(stale, running))
+  end
+
+  # The loops of the conversations `release?` picks go, unless their reply
+  # is still streaming (they go when it ends).
+  defp release_idle(socket, release?) do
+    %{sessions: sessions, streams: streams} = socket.assigns
 
     gone =
       for cid <- sessions |> Map.values() |> Enum.uniq(),
-          cid != open and not Reply.running?(streams[cid]),
+          release?.(cid) and not Reply.running?(streams[cid]),
           into: MapSet.new() do
         :ok = Agent.release(cid)
         cid

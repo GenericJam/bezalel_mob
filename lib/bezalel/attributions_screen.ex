@@ -20,6 +20,10 @@ defmodule Bezalel.AttributionsScreen do
   @by_nc "https://creativecommons.org/licenses/by-nc/4.0/"
   @by_3 "https://creativecommons.org/licenses/by/3.0/"
 
+  # The NET's acknowledgement, as bezalel_core quotes it (its terms ask for
+  # it verbatim).
+  @net Bezalel.Study.Translations.get("net")
+
   @notice "Modified for Bezalel: the sources below were converted into SQLite databases, " <>
             "selected and excerpted, reformatted (for example HTML to plain text), re-keyed to " <>
             "Bible references, indexed for search, and split into downloadable packs. Their " <>
@@ -33,6 +37,11 @@ defmodule Bezalel.AttributionsScreen do
     {"Berean Standard Bible",
      "The Holy Bible, Berean Standard Bible, BSB is produced in cooperation with Bible Hub, Discovery Bible, unfoldingWord, Bible Aquifer, OpenBible.com, and the Berean Bible Translation Committee. This text of God's Word has been dedicated to the public domain.",
      [{"Public domain", nil}], ["https://bereanbible.com"]},
+    {@net.name, @net.copyright,
+     [
+       {"Free non-commercial use by permission (netbible.com/copyright). The NET's translators' notes are not included.",
+        nil}
+     ], [@net.url]},
     {"Brown-Driver-Briggs",
      "Brown-Driver-Briggs Hebrew and English Lexicon (1906), public domain; digital edition by Eliran Wong.",
      [{"Public domain", nil}], ["https://github.com/eliranwong/unabridged-BDB-Hebrew-lexicon"]},

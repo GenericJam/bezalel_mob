@@ -15,6 +15,7 @@ defmodule Bezalel.AppScreenTest do
     Mob.State.delete(:bezalel_conversation)
     Mob.State.delete(:bezalel_mode)
     Mob.State.delete(:bezalel_model)
+    Mob.State.delete(:bezalel_study_preferences)
     # No sign-in or API key: replies are the storyboard's (live replies are
     # Bezalel.LiveAgentTest's).
     MemoryStore.clear()
@@ -24,7 +25,8 @@ defmodule Bezalel.AppScreenTest do
   test "first launch opens the worked Exodus 31 study, and every tab renders what the natives can draw" do
     view = mount_screen(AppScreen)
     assert assigns(view).conversation.name == "Exodus 31 · Bezalel"
-    assert text(view) =~ "SERMON PREP · EXODUS 31"
+    assert text(view) =~ "STUDY · EXODUS 31"
+    refute text(view) =~ ~r/sermon/i
 
     for tab <- [:convs, :workshop, :settings, :study] do
       view = render_info(view, {:tap, {:tab, tab}})

@@ -13,12 +13,21 @@ defmodule Bezalel.Agent.Card do
       %{
         "from" => "lookup_verse",
         "title" => "Exodus 31:2-3",
-        "version" => "BSB",
+        "version" => "NET",
+        "version_url" => "http://netbible.org",
         "verses" => [%{"ref" => "2", "tokens" => [["See,", nil], ["called", "H7121G"], ...]}],
         "words" => %{"H7121G" => %{"strongs" => ..., "word" => ..., "translit" => ...,
                                    "gloss" => ..., "morph" => ...}},
         "more" => 0
       }
+
+  `version` is the translation the tool quoted (the result's
+  `translation`, the user's choice in Settings or the BSB standing in for
+  a NET that isn't on the phone) when any verse shown is its text (as
+  bezalel_core's `Format.translation_label/2` labels it), empty when every
+  verse shown has only STEPBible's gloss; `version_url` is set for the
+  NET, whose terms ask for "(NET)" after the quotation, linked to
+  netbible.org (the chat draws it after the last verse).
 
   English and original aren't aligned word for word in the packs: an
   English word is highlighted when it is a content word of an original
@@ -52,12 +61,16 @@ defmodule Bezalel.Agent.Card do
       if one_chapter?, do: "#{v.verse}", else: "#{v.chapter}:#{v.verse}"
     end
 
-    card("lookup_verse", result.label || result.reference, verses, ref, fn _strongs -> true end)
+    card(result, "lookup_verse", result.label || result.reference, verses, ref, fn _ -> true end)
   end
 
-  def from_tool("word_study", %{entry: %{"strongs" => strongs} = entry, examples: [_ | _] = ex}) do
+  def from_tool(
+        "word_study",
+        %{entry: %{"strongs" => strongs} = entry, examples: [_ | _] = ex} = result
+      ) do
     title = Enum.join(Enum.reject([strongs, entry["transliteration"]], &blank?/1), " · ")
-    card("word_study", title, ex, &Reference.display(&1.reference), &same_strongs?(&1, strongs))
+    display = &Reference.display(&1.reference)
+    card(result, "word_study", title, ex, display, &same_strongs?(&1, strongs))
   end
 
   def from_tool(_name, _details), do: nil
@@ -74,7 +87,7 @@ defmodule Bezalel.Agent.Card do
     "#{body} (#{title}#{version})"
   end
 
-  defp card(from, title, verses, ref, highlight?) do
+  defp card(result, from, title, verses, ref, highlight?) do
     {shown, rest} = Enum.split(verses, @max_verses)
 
     {rows, words} =
@@ -89,10 +102,14 @@ defmodule Bezalel.Agent.Card do
         {%{"ref" => ref.(v), "tokens" => tokens}, Map.merge(found, words)}
       end)
 
+    translation = Map.get(result, :translation)
+    translated? = translation != nil and Enum.any?(shown, & &1.translated)
+
     %{
       "from" => from,
       "title" => title,
-      "version" => if(Enum.all?(shown, & &1.bsb), do: "BSB", else: ""),
+      "version" => if(translated?, do: translation.abbreviation, else: ""),
+      "version_url" => if(translated? and translation.key == "net", do: translation.url),
       "verses" => rows,
       "words" => words,
       "more" => length(rest)

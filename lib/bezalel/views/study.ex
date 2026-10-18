@@ -106,7 +106,7 @@ defmodule Bezalel.Views.Study do
             <Row gap={8} align={:center}>
               {hammer}
               <Text
-                text="Build a sermon outline tool from this"
+                text="Build an outline tool from this"
                 font={:ui_medium}
                 text_size={14}
                 text_color={:on_background}
@@ -308,12 +308,15 @@ defmodule Bezalel.Views.Study do
   defp card(nil), do: []
 
   defp card(c) do
+    last = length(c["verses"]) - 1
+
     verses =
-      for v <- c["verses"] do
+      for {v, i} <- Enum.with_index(c["verses"]) do
         ref =
           ~MOB(<Text text={v["ref"]} font={:ui_semibold} text_size={11} text_color={:muted} />)
 
-        wrap([ref | Enum.map(v["tokens"], &card_word(&1, c["words"]))])
+        words = Enum.map(v["tokens"], &card_word(&1, c["words"]))
+        wrap([ref | words] ++ if(i == last, do: net_link(c), else: []))
       end
 
     more =
@@ -326,6 +329,18 @@ defmodule Bezalel.Views.Study do
     hint = if c["words"] == %{}, do: nil, else: "Tap a highlighted word for the original"
     passage_card(c["title"], c["version"], verses ++ more, hint)
   end
+
+  # The NET's terms: "(NET)" follows the quotation, linked to netbible.org.
+  defp net_link(%{"version" => label, "version_url" => url}) when is_binary(url) do
+    tap = {self(), {:study, {:open_url, url}}}
+    text = "(" <> label <> ")"
+
+    [
+      ~MOB(<Text text={text} font={:ui_semibold} text_size={13} text_color={:secondary} on_tap={tap} />)
+    ]
+  end
+
+  defp net_link(_card), do: []
 
   defp card_word([token, strongs], words) do
     case words[strongs] do
@@ -344,7 +359,7 @@ defmodule Bezalel.Views.Study do
         <Row fill_width={true}>
           {UI.kicker(ref)}
           <Spacer />
-          {UI.kicker(version)}
+          {UI.kicker(version || "")}
         </Row>
         """
         | body ++ hint
@@ -603,9 +618,15 @@ defmodule Bezalel.Views.Study do
 
   def handle(:build_from_chat, socket) do
     desc =
-      "A sermon outline helper for #{passage_ref(socket.assigns.messages)}: big idea, three movements, an illustration for each."
+      "A passage outline helper for #{passage_ref(socket.assigns.messages)}: its main idea, its movements, and the key words of each."
 
     {:noreply, socket |> Socket.assign(desc: desc, build: nil) |> Helpers.go(:workshop)}
+  end
+
+  # A link in the chat (the NET's label on a passage card).
+  def handle({:open_url, url}, socket) do
+    Rho.Config.open_url(url)
+    {:noreply, socket}
   end
 
   @doc """

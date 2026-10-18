@@ -1,6 +1,6 @@
 defmodule Bezalel.Library.Conversation do
   @moduledoc """
-  One study conversation on the shelf: a week's sermon prep, a word study, ...
+  One study conversation on the shelf: a passage study, a word study, ...
   Its transcript is its rho session (`session_id`, in the file
   `session_file` under `Rho.Session.dir/0`; both nil until it's first
   written); `message_count` is what the shelf shows. `deleted_at` is set

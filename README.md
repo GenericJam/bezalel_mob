@@ -1,10 +1,14 @@
 # Bezalel (bezalel_mob)
 
 A free Bible-study companion for Android and iOS, built with
-[Mob](https://github.com/GenericJam/mob) (Elixir on the phone). Ask about a
-passage and it answers from the Hebrew and Greek: lexicons, Strong's numbers,
-morphology, cross-references, people and places, study notes. Tap a word for
-its entry. The Workshop builds small study tools, such as a sermon outline.
+[Mob](https://github.com/GenericJam/mob) (Elixir on the phone), for pastors
+and curious readers alike: it shows what the texts say and where they came
+from. Ask about a passage and it answers from the Hebrew and Greek: lexicons,
+Strong's numbers, morphology, cross-references, people and places, study
+notes, in the English of your choice (the NET Bible or the Berean Standard
+Bible). Tap a word for its entry. Settings → Study sets how it reads and
+answers (its approach, which you can rewrite) and which sources it draws on.
+The Workshop builds small study tools, such as a passage outline.
 
 Bezalel is free, with no ads. You bring your own model: sign in with a Claude
 or ChatGPT subscription, or enter an Anthropic, OpenAI or Google Gemini API key.
@@ -48,8 +52,9 @@ The study tools and the study database come from
 tools are ported to Elixir in bezalel_core, and its pipeline builds the
 database, pinned to commit `38cef28`. The data's own sources (STEPBible,
 BibleAquifer, ACAI, Theographic, Perseus and others) and their licences are
-in [data/SOURCES.md](data/SOURCES.md); the app shows them under Settings →
-Study library → Sources and licences. See [NOTICE](NOTICE).
+in [data/SOURCES.md](data/SOURCES.md); the NET Bible® is quoted by permission
+(Biblical Studies Press, http://netbible.org). The app shows them under
+Settings → Study library → Sources and licences. See [NOTICE](NOTICE).
 
 ## Building and running
 

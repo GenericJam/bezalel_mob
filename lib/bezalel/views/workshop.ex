@@ -15,7 +15,7 @@ defmodule Bezalel.Views.Workshop do
   alias MobBezalel.{Icons, Palette, UI}
   alias Rho.Dyn.Compiler
 
-  @starters ["Sermon outline helper", "Word study view", "Reading plan"]
+  @starters ["Passage outline helper", "Word study view", "Reading plan"]
   @diff_shown 6_000
 
   # ── Workshop ──────────────────────────────────────────────────────────────
@@ -781,7 +781,7 @@ defmodule Bezalel.Views.Workshop do
     desc =
       case String.trim(socket.assigns.desc) do
         "" ->
-          "A sermon outline helper: give it a passage, it drafts a big idea and three movements I can edit."
+          "A passage outline helper: give it a passage, it drafts its main idea and movements I can edit."
 
         text ->
           text

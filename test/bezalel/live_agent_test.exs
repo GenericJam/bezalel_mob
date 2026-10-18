@@ -6,10 +6,10 @@ defmodule Bezalel.LiveAgentTest do
   @moduletag :screen
 
   alias Bezalel.Agent.{Live, Reply}
-  alias Bezalel.{AppScreen, Library, Repo}
+  alias Bezalel.{AppScreen, Library, Repo, Settings}
   alias Bezalel.Library.{Conversation, Tool}
-  alias Bezalel.Study.Prompt
-  alias Bezalel.Test.{FakeLLM, MemoryStore}
+  alias Bezalel.Study.{Preferences, Prompt}
+  alias Bezalel.Test.{Browser, FakeLLM, MemoryStore}
   alias Bezalel.Views.{Helpers, Study}
   alias MobBezalel.UI
 
@@ -17,13 +17,17 @@ defmodule Bezalel.LiveAgentTest do
 
   setup do
     for schema <- [Tool, Conversation], do: Repo.delete_all(schema)
-    for key <- [:bezalel_conversation, :bezalel_mode, :bezalel_model], do: Mob.State.delete(key)
+
+    for key <- [:bezalel_conversation, :bezalel_mode, :bezalel_model, :bezalel_study_preferences],
+        do: Mob.State.delete(key)
+
     MemoryStore.clear()
     :ok = Rho.Auth.put_api_key(:anthropic, "sk-ant-api03-test-key-0123456789")
 
     on_exit(fn ->
       Application.delete_env(:bezalel, Live)
       Bezalel.Agent.release_all()
+      Mob.State.delete(:bezalel_study_preferences)
     end)
 
     :ok
@@ -68,6 +72,7 @@ defmodule Bezalel.LiveAgentTest do
   # The Markdown view of the block under `key` (`Helpers.block_key/2`).
   defp markdown(view, key), do: find(view, :native_view, id: String.to_atom("md:" <> key))
   defp texts(view), do: for(%{props: %{text: t}} <- find_all(view, :text), do: t)
+  defp tool_names(request), do: Enum.map(request.tools, & &1.name)
 
   test "a reply streams into THINKING, a TOOL CALL with its result, the SUMMARY and the passage card, then is stored" do
     script([
@@ -78,14 +83,22 @@ defmodule Bezalel.LiveAgentTest do
     view = AppScreen |> mount_screen() |> ask("Who is Bezalel?")
     assert assigns(view).draft == ""
     assert_receive {:llm_request, first}
-    assert first.system_prompt == Prompt.system_prompt()
+    # The study prompt for the default preferences, with the phone's
+    # formatting section.
+    assert first.system_prompt == Live.system_prompt(%Preferences{})
+
+    assert first.system_prompt ==
+             Prompt.system_prompt(%Preferences{}, surface: Live.phone_formatting())
+
+    assert first.system_prompt =~ "## Formatting for a phone"
+    assert first.system_prompt =~ "column about 40 characters wide"
 
     assert Enum.sort(Enum.map(first.tools, & &1.name)) ==
              Enum.sort(Enum.map(Live.tools(), & &1.name()))
 
     # The loop starts from the conversation as stored: the seeded study.
     assert [%{role: :user} = opening | _] = first.messages
-    assert hd(opening.content).text =~ "Help me prepare a sermon on Bezalel"
+    assert hd(opening.content).text =~ "Help me study Bezalel"
 
     view = until(view, &match?(%{type: :tool_execution_end}, &1))
     blocks = Reply.blocks(stream(view))
@@ -97,9 +110,26 @@ defmodule Bezalel.LiveAgentTest do
     # The passage card, from the tool's data: tappable words with Strong's numbers.
     card = stream(view).card
     assert card["title"] == "Exodus 31:2-3"
-    assert ["called", "H7121G"] in hd(card["verses"])["tokens"]
+    # (The NET's "I have chosen Bezalel": the gloss is "called", so "chosen" stays plain.)
+    assert ["Bezalel", "H1212G"] in hd(card["verses"])["tokens"]
+    assert ["chosen", nil] in hd(card["verses"])["tokens"]
     assert card["words"]["H7307G"]["translit"] == "Ru.ach"
     assert text(view) =~ "Tap a highlighted word for the original"
+    # The translation it quotes (the NET, the default, from the fixture
+    # translations pack), labelled; "(NET)" follows the last verse, linked
+    # to netbible.org, as the NET's terms ask.
+    assert card["version"] == "NET"
+    assert card["version_url"] == "http://netbible.org"
+    assert "NET" in texts(view)
+    net = {:study, {:open_url, "http://netbible.org"}}
+    assert %{props: %{on_tap: {_, ^net}}} = find(view, :text, text: "(NET)")
+
+    [last_verse] =
+      view |> find_all(:wrap) |> Enum.filter(&(find(&1, :text, text: "(NET)") != nil))
+
+    assert List.last(last_verse.children).props.text == "(NET)"
+    render_info(view, {:tap, net})
+    assert Browser.last() == "http://netbible.org"
 
     view = until(view, &match?(%{type: :message_update, delta: "Bezalel is "}, &1))
     assert block(Reply.blocks(stream(view)), "SUMMARY")["first"] == "Bezalel is"
@@ -130,6 +160,68 @@ defmodule Bezalel.LiveAgentTest do
     view = render_async(view)
     assert {:lexeme, ^word, %{"strongs" => "H7307"}} = assigns(view).sheet
     assert_renderable(view)
+  end
+
+  describe "study preferences" do
+    @approach "Answer briefly, as a rabbi reading with students would."
+
+    test "a change releases the idle loop; the next question's loop has the new prompt and withholds the tools of the sources switched off" do
+      script([[{:text, "First."}], [{:text, "Second."}]])
+
+      view = AppScreen |> mount_screen() |> ask("Who is Bezalel?") |> until()
+      assert_receive {:llm_request, first}
+      assert first.system_prompt =~ "Evidence and range, not verdicts"
+      assert first.system_prompt =~ "Moshe Kline's Woven Torah hypothesis"
+      refute first.system_prompt =~ @approach
+      assert "get_torah_weave" in tool_names(first)
+      # The loop stays while the conversation is open.
+      assert loop?(view)
+
+      # The approach and sources screens store the change and tell the app.
+      Settings.update_study_preferences(fn prefs ->
+        %{
+          prefs
+          | approach: @approach,
+            excluded_sources: MapSet.put(prefs.excluded_sources, "method:torah_weave")
+        }
+      end)
+
+      view = render_info(view, {:study_preferences, :changed})
+      assert assigns(view).study.approach == @approach
+      refute loop?(view)
+
+      view |> ask("And Oholiab?") |> until()
+      assert_receive {:llm_request, second}
+      # The user's approach in place of the default one.
+      assert second.system_prompt =~ @approach
+      refute second.system_prompt =~ "Evidence and range, not verdicts"
+      # Kline's Torah weave switched off: its tool and its guide line go,
+      # and the prompt names it as switched off.
+      refute second.system_prompt =~ "Moshe Kline's Woven Torah hypothesis"
+      assert second.system_prompt =~ "## Sources switched off"
+      assert second.system_prompt =~ "Torah Weave (Moshe Kline)"
+      refute "get_torah_weave" in tool_names(second)
+      assert "lookup_verse" in tool_names(second)
+      # The second loop resumed the conversation: the first answer is there.
+      assert Enum.any?(second.messages, &(&1.role == :assistant))
+    end
+
+    test "a change made while a reply streams keeps its loop until the reply ends" do
+      script([[{:text, "Partial"}, {:sleep, 300}, {:text, " answer."}], [{:text, "Next."}]])
+
+      view = AppScreen |> mount_screen() |> ask("Who is Bezalel?")
+      view = until(view, &match?(%{type: :message_update}, &1))
+      %{id: cid} = assigns(view).conversation
+
+      view = render_info(view, {:tap, {:settings, {:translation, "bsb"}}})
+      assert Settings.study_preferences().translation == "bsb"
+      assert loop?(view)
+      assert MapSet.member?(assigns(view).stale, cid)
+
+      view = until(view)
+      refute loop?(view)
+      refute MapSet.member?(assigns(view).stale, cid)
+    end
   end
 
   test "Markdown renders natively: the summary as it streams, thinking and tool results opened; headers stay plain text" do

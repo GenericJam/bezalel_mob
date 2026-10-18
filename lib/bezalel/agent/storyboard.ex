@@ -32,8 +32,8 @@ defmodule Bezalel.Agent.Storyboard do
       block(
         "think",
         "THINKING",
-        "The user wants the heart of a Bezalel sermon. Start where the text is surprising.",
-        "Exodus 31:3 is the first explicit “filled with the Spirit of God” in the canon, and it’s given to an artisan. That’s the hook. Structure follows the verbs: called (v.2), filled (v.3), given (v.6). Pull the Hebrew for rûaḥ and ḥokmâ so the pastor can check the claim."
+        "The user wants the heart of the Bezalel passage. Start where the text is surprising.",
+        "Exodus 31:3 is the first explicit “filled with the Spirit of God” in the canon, and it’s given to an artisan. That’s the hook. Structure follows the verbs: called (v.2), filled (v.3), given (v.6). Pull the Hebrew for rûaḥ and ḥokmâ so the reader can check the claim."
       ),
       block(
         "tool",
@@ -75,7 +75,7 @@ defmodule Bezalel.Agent.Storyboard do
         "think",
         "THINKING",
         "They want to dig into “#{phrase}”. Check the Hebrew behind the English.",
-        "Pull the lexicon entry, then give something a preacher can use on Sunday."
+        "Pull the lexicon entry, then show what the word does in the passage."
       ),
       block(
         "tool",
