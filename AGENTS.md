@@ -471,7 +471,10 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   `Documents/packs` at startup. On
   first launch a sheet offers the core pack (26 MB download, 182 MB on the
   phone); Settings → Study library downloads, updates ("Check for
-  updates") and removes packs, shows storage used, and opens Sources and
+  updates") and removes packs (the optional ones: NET Bible, notes,
+  Septuagint, ancient sources, Dead Sea Scrolls (`scrolls`, from data
+  version 2; decisions/2026-10-18-scrolls-pack-optional.md), people and
+  places), shows storage used, and opens Sources and
   licences (`Bezalel.AttributionsScreen`, from `data/SOURCES.md`; change
   both together). `Bezalel.Packs` runs outside the screen: one download at
   a time, resumed with a Range request after a dropped connection or a

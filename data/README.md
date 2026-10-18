@@ -110,6 +110,10 @@ The split (`packs.json`):
 | `ancient` | `ancient_source_passages`, `ancient_source_passages_fts` (FTS5), `ancient_source_biblical_links`, `ancient_source_notes` | `search_ancient_sources`, `lookup_ancient_source` |
 | `graph` | `graph_people`, `graph_places`, `graph_events`, `graph_people_groups`, `graph_family_edges`, `graph_person_event_edges`, `graph_event_place_edges`, `graph_person_group_edges`, `graph_verse_mentions` | `people_in_passage`, `explore_genealogy`, `explore_person_events`, `explore_place`, `find_connection`, `graph_enriched_search` |
 
+Two more optional packs, `translations` (the NET Bible) and `scrolls` (the
+Dead Sea Scrolls), are built by bezalel_core's `data/` (its `data/README.md`)
+and published with these from the data version that adds them.
+
 Left out: the `hlt_*` tables, which no script at the pin fills (`make_packs.py`
 checks they are empty), and the `heiser_*` compatibility views.
 

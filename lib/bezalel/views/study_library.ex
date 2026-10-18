@@ -19,6 +19,7 @@ defmodule Bezalel.Views.StudyLibrary do
     "notes" => "Notes",
     "lxx" => "Septuagint",
     "ancient" => "Ancient sources",
+    "scrolls" => "Dead Sea Scrolls",
     "graph" => "People and places",
     "translations" => "NET Bible"
   }
@@ -291,7 +292,7 @@ defmodule Bezalel.Views.StudyLibrary do
       ~MOB(<Text text={sizes} font={:ui_medium} text_size={14} text_color={:on_background} />),
       metered,
       note(
-        "Study works without it, but the tools will say the pack is missing. The core pack and the optional ones (the NET Bible, notes, Septuagint, ancient sources, people and places) are in Settings → Study library."
+        "Study works without it, but the tools will say the pack is missing. The core pack and the optional ones (the NET Bible, notes, Septuagint, ancient sources, the Dead Sea Scrolls, people and places) are in Settings → Study library."
       ),
       ~MOB"""
       <Row gap={10} fill_width={true}>

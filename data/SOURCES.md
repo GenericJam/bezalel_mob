@@ -46,6 +46,7 @@ of them shipped.
 | Targum Onkelos (Sefaria): Aramaic (Torat Emet) | `ancient_source_*` → ancient | github.com/Sefaria/Sefaria-Export-Archive @ `3f101363` | Public domain |
 | Targum Onkelos English: Metsudah Chumash (Metsudah Publications, 2009), via Sefaria | `ancient_source_*` → ancient | same | **CC BY-NC 4.0** |
 | Dead Sea Scrolls CD, 1QS, 1QSa, 1QpHab: ETCBC/dss (Abegg, Bowley, Cook) | `ancient_source_*` → ancient | github.com/ETCBC/dss @ `47ecc173` | **CC BY-NC 4.0** |
+| Dead Sea Scrolls, the scrolls pack: 30 major non-biblical works (132 Qumran manuscripts) and the biblical manuscripts' readings, ETCBC/dss (Abegg, Bowley, Cook); built by bezalel_core's `data/` (`mix bezalel.data.scrolls`). No English translation | `ancient_source_*` (corpus `qumran`), `dss_biblical_manuscripts`, `dss_biblical_verses` → scrolls | github.com/ETCBC/dss @ `47ecc173` (v2.0.1; files sha256-pinned in bezalel_core `data/pins.json`) | **CC BY-NC 4.0**. Manuscript names and script periods: the Leon Levy Dead Sea Scrolls Digital Library (IAA) (facts, no licence) |
 | Mishnah: Vilna (Romm, 1913) Hebrew; Joshua Kulp's *Mishnah Yomit* English, via Sefaria | `ancient_source_*` → ancient | Sefaria-Export-Archive @ `3f101363` | Hebrew: public domain; English: CC BY (3.0) |
 | 1 Enoch: R. H. Charles (1912/1917), English Wikisource | `ancient_source_*` → ancient | Wikisource revisions pinned in studybible-mcp | Public domain |
 | 4 Ezra: KJV Apocrypha (eBible.org eng-kjv) and Clementine Vulgate Latin (Latin Wikisource rev. 148869) | `ancient_source_*` → ancient | sha256/revision pinned in studybible-mcp | English: public domain (see note on the KJV); Latin transcription: CC BY-SA 4.0 |
@@ -173,9 +174,13 @@ Strings to use verbatim:
 18. **Targum Onkelos** — "Targum Onkelos, Aramaic text: public domain (Torat
     Emet); English: Metsudah Chumash, Metsudah Publications, 2009, CC BY-NC 4.0;
     both via Sefaria. Modified." Link: https://www.sefaria.org
-19. **Dead Sea Scrolls** — "Dead Sea Scrolls transcription by Martin G. Abegg Jr.,
-    James E. Bowley and Edward M. Cook, ETCBC/dss, CC BY-NC 4.0. Modified." Link:
-    https://github.com/ETCBC/dss
+19. **Dead Sea Scrolls** — "Dead Sea Scrolls (CD, 1QS, 1QSa and 1QpHab in the
+    ancient pack; the scrolls pack's 30 major non-biblical works from 132 Qumran
+    manuscripts and the biblical manuscripts' readings): transcription by Martin
+    G. Abegg Jr., James E. Bowley and Edward M. Cook, ETCBC/dss, CC BY-NC 4.0.
+    Modified. Manuscript names and script periods: the Leon Levy Dead Sea Scrolls
+    Digital Library (Israel Antiquities Authority)."
+    Link: https://github.com/ETCBC/dss
 20. **Mishnah** — "Mishnah, ed. Romm, Vilna 1913 (public domain); English: Joshua
     Kulp, Mishnah Yomit, CC BY 3.0; via Sefaria. Modified." Links:
     https://www.sefaria.org and https://creativecommons.org/licenses/by/3.0/
@@ -222,8 +227,9 @@ credits, and the summaries are studybible-mcp's own words):
 ## Obligations that follow
 
 - **Non-commercial (CC BY-NC):** the Dead Sea Scrolls and the Metsudah English are
-  in the ancient pack. Bezalel is free with no ads (Decisions, 3); if that ever
-  changed, those two would have to come out of the ancient pack first.
+  in the ancient pack, and the whole scrolls pack is the Dead Sea Scrolls. Bezalel
+  is free with no ads (Decisions, 3); if that ever changed, those two would have to
+  come out of the ancient pack, and the scrolls pack be withdrawn, first.
 - **NET Bible (permission, non-commercial):** quoted under the publisher's
   permission for free non-commercial use (netbible.com/copyright). Every quotation
   is followed by "(NET)", in software on the internet with "NET" linked to

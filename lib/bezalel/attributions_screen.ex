@@ -97,7 +97,7 @@ defmodule Bezalel.AttributionsScreen do
      [{"CC BY-NC 4.0 (English)", @by_nc}, {"Public domain (Aramaic)", nil}],
      ["https://www.sefaria.org"]},
     {"Dead Sea Scrolls",
-     "Dead Sea Scrolls transcription by Martin G. Abegg Jr., James E. Bowley and Edward M. Cook, ETCBC/dss, CC BY-NC 4.0. Modified.",
+     "Dead Sea Scrolls (CD, 1QS, 1QSa and 1QpHab in the ancient pack; the scrolls pack's 30 major non-biblical works from 132 Qumran manuscripts and the biblical manuscripts' readings): transcription by Martin G. Abegg Jr., James E. Bowley and Edward M. Cook, ETCBC/dss, CC BY-NC 4.0. Modified. Manuscript names and script periods: the Leon Levy Dead Sea Scrolls Digital Library (Israel Antiquities Authority).",
      [{"CC BY-NC 4.0", @by_nc}], ["https://github.com/ETCBC/dss"]},
     {"Mishnah",
      "Mishnah, ed. Romm, Vilna 1913 (public domain); English: Joshua Kulp, Mishnah Yomit, CC BY 3.0; via Sefaria. Modified.",

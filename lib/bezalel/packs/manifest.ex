@@ -12,8 +12,10 @@ defmodule Bezalel.Packs.Manifest do
 
   # The translations pack holds the NET Bible (bezalel_core's
   # `Bezalel.Study.Translations`), the default English: optional like the
-  # packs after it, listed next to core.
-  @known ~w(core translations notes lxx ancient graph)
+  # packs after it, listed next to core. The scrolls pack (the Dead Sea
+  # Scrolls' non-biblical works and the biblical manuscripts' readings),
+  # optional too, follows the ancient sources it extends.
+  @known ~w(core translations notes lxx ancient scrolls graph)
 
   @type entry :: %{
           name: String.t(),
