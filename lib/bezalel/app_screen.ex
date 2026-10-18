@@ -17,6 +17,7 @@ defmodule Bezalel.AppScreen do
     Helpers,
     Images,
     Sheets,
+    Stills,
     Study,
     StudyLibrary,
     Workshop
@@ -52,6 +53,8 @@ defmodule Bezalel.AppScreen do
     # Loops left by an earlier run of this screen answer to nobody now; the
     # next question starts one from the conversation as stored.
     :ok = Bezalel.Agent.release_all()
+    # Stills previews left by an earlier run.
+    :ok = Stills.sweep()
     # The study library (Settings, the first-launch offer) follows the
     # downloads, which run outside this screen.
     :ok = Bezalel.Packs.subscribe()
@@ -110,7 +113,7 @@ defmodule Bezalel.AppScreen do
         speaking_ref: nil,
         read_aloud: Settings.read_aloud?()
       )
-      |> Mob.Socket.assign(Attach.assigns() ++ MaterialsView.assigns())
+      |> Mob.Socket.assign(Attach.assigns() ++ MaterialsView.assigns() ++ Stills.assigns())
       |> Helpers.open_conversation(conversation)
       |> StudyLibrary.mount()
 
@@ -210,7 +213,8 @@ defmodule Bezalel.AppScreen do
   # ── Events ────────────────────────────────────────────────────────────────
 
   def handle_info({:tap, {:tab, tab}}, socket) do
-    {:noreply, socket |> Mob.Socket.assign(sheet: nil, menu: nil) |> Helpers.go(tab)}
+    {:noreply,
+     socket |> Stills.close() |> Mob.Socket.assign(sheet: nil, menu: nil) |> Helpers.go(tab)}
   end
 
   def handle_info({:tap, {:study, event}}, socket), do: Study.handle(event, socket)
@@ -221,6 +225,12 @@ defmodule Bezalel.AppScreen do
   def handle_info({:tap, {:packs, event}}, socket), do: StudyLibrary.handle(event, socket)
   def handle_info({:tap, {:attach, event}}, socket), do: Attach.handle(event, socket)
   def handle_info({:tap, {:materials, event}}, socket), do: MaterialsView.handle(event, socket)
+  def handle_info({:tap, {:stills, event}}, socket), do: Stills.handle(event, socket)
+
+  def handle_info({:change, {:stills, :at}, value}, socket),
+    do: {:noreply, Stills.move(value, socket)}
+
+  def handle_info({:stills, :settle, seq}, socket), do: {:noreply, Stills.settle(seq, socket)}
 
   # The native answers for the composer: permissions, pickers, the camera,
   # the recorder, the recogniser, Whisper's model; and playback ending.
@@ -263,10 +273,12 @@ defmodule Bezalel.AppScreen do
      )}
   end
 
-  def handle_info({:tap, :sheet}, socket), do: {:noreply, Mob.Socket.assign(socket, :sheet, nil)}
+  # However a sheet closes, a stills picker's tasks and previews go with it.
+  def handle_info({:tap, :sheet}, socket),
+    do: {:noreply, socket |> Stills.close() |> Mob.Socket.assign(:sheet, nil)}
 
   def handle_info({:dismiss, :sheet}, socket),
-    do: {:noreply, Mob.Socket.assign(socket, :sheet, nil)}
+    do: {:noreply, socket |> Stills.close() |> Mob.Socket.assign(:sheet, nil)}
 
   def handle_info({:change, :draft, value}, socket),
     do: {:noreply, Mob.Socket.assign(socket, :draft, value)}
@@ -349,4 +361,10 @@ defmodule Bezalel.AppScreen do
 
   def handle_async({:prepare, _cid}, result, socket),
     do: {:noreply, Attach.prepared(result, socket)}
+
+  def handle_async({:stills, :info, ref}, result, socket),
+    do: {:noreply, Stills.info(ref, result, socket)}
+
+  def handle_async({:stills, :frame, ref}, result, socket),
+    do: {:noreply, Stills.framed(ref, result, socket)}
 end
