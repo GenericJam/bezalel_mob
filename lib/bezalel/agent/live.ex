@@ -65,9 +65,13 @@ defmodule Bezalel.Agent.Live do
   @spec start_link() :: {:ok, pid()} | {:error, term()}
   def start_link, do: Registry.start_link(keys: :unique, name: @registry)
 
-  @doc "The core tools the app starts rho's registry with (`Rho.Supervisor`)."
+  @doc """
+  The core tools the app starts rho's registry with (`Rho.Supervisor`):
+  the study tools, rho's `read_artifact`, and the materials tools
+  (`draw_image`, which keeps its drawing in `Bezalel.MaterialStore`).
+  """
   @spec tools() :: [module()]
-  def tools, do: Tools.all() ++ [Rho.Tools.ReadArtifact]
+  def tools, do: Tools.all() ++ Tools.materials() ++ [Rho.Tools.ReadArtifact]
 
   @doc "The registry's tools Study never offers: the ones that write Dyn code."
   @spec withheld() :: [String.t()]
@@ -92,20 +96,20 @@ defmodule Bezalel.Agent.Live do
   def keep_details(name, details), do: Card.from_tool(name, details)
 
   @impl true
-  def ask(conversation_id, text, model, subscriber) do
+  def ask(conversation_id, text, model, subscriber, attachments) do
     with {:ok, loop} <- loop(conversation_id, model),
          :ok <- Loop.subscribe(loop, subscriber),
          :ok <- use_model(loop, model),
-         :ok <- Loop.prompt(loop, text) do
+         :ok <- Loop.prompt(loop, text, attachments) do
       {:ok, Loop.config(loop).session.id}
     end
   end
 
   @impl true
-  def steer(conversation_id, text) do
+  def steer(conversation_id, text, attachments) do
     case whereis(conversation_id) do
       nil -> {:error, :idle}
-      loop -> Loop.steer(loop, text)
+      loop -> Loop.steer(loop, text, attachments)
     end
   end
 

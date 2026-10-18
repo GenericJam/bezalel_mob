@@ -7,7 +7,7 @@ defmodule Bezalel.Views.Sheets do
   import Mob.Sigil
 
   alias Bezalel.{Models, Scripture}
-  alias Bezalel.Views.{StudyLibrary, Workshop}
+  alias Bezalel.Views.{Attach, StudyLibrary, Workshop}
   alias MobBezalel.UI
 
   @doc "The sheet for `assigns.sheet`, or nothing."
@@ -48,6 +48,29 @@ defmodule Bezalel.Views.Sheets do
 
   defp content(:approve_build, assigns), do: Workshop.approve_sheet(assigns)
   defp content(:packs_offer, assigns), do: StudyLibrary.offer(assigns)
+  defp content(:attach, _assigns), do: Attach.menu_sheet()
+  defp content({:video_notice, source}, _assigns), do: Attach.video_sheet(source)
+
+  defp content({:delete_material, id}, _assigns) do
+    confirm = {self(), {:materials, {:confirm_delete, id}}}
+    keep = {self(), :sheet}
+
+    [
+      ~MOB(<Text text="Delete this material?" font={:display} text_size={24} text_color={:on_background} />),
+      ~MOB(<Text
+  text="It goes from this phone, with its transcript. A conversation that sent it keeps its words but can't show it, and the agent is told it couldn't be loaded. A drawing made from it stays."
+  text_size={14.5}
+  line_height={1.55}
+  text_color={:on_background}
+/>),
+      ~MOB"""
+      <Row gap={10} fill_width={true}>
+        {UI.pill_button("Delete", confirm, :danger, weight: 1, height: 48)}
+        {UI.pill_button("Keep it", keep, :outline, weight: 1, height: 48)}
+      </Row>
+      """
+    ]
+  end
 
   defp content(:models, assigns) do
     groups =

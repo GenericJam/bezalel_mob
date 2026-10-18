@@ -2,9 +2,10 @@ defmodule Bezalel.Views.Helpers do
   @moduledoc "Socket helpers and pieces shared by the tab views."
   import Mob.Sigil
 
-  alias Bezalel.{Agent, Library, Models, Settings}
+  alias Bezalel.{Agent, Library, MaterialStore, Models, Settings}
   alias Bezalel.Agent.Reply
   alias Bezalel.Views.{Conversations, Images, Workshop}
+  alias Bezalel.Views.Materials, as: MaterialsView
   alias Mob.Socket
 
   @toast_ms 4000
@@ -140,15 +141,25 @@ defmodule Bezalel.Views.Helpers do
   defp to(socket, :settings) do
     Socket.assign(socket,
       tab: :settings,
-      counts: %{conversations: Library.conversation_count(), tools: Library.tool_count()}
+      counts: %{
+        conversations: Library.conversation_count(),
+        tools: Library.tool_count(),
+        materials: MaterialStore.count()
+      }
     )
   end
+
+  defp to(socket, :materials),
+    do: socket |> Socket.assign(tab: :materials, mat_open: nil) |> MaterialsView.load()
 
   defp to(socket, tab), do: Socket.assign(socket, :tab, tab)
 
   @doc "Reloads the visible tab's data after something changed underneath it."
   def refresh(%{assigns: %{tab: tab}} = socket) when tab in [:convs, :workshop, :settings],
     do: to(socket, tab)
+
+  def refresh(%{assigns: %{tab: :materials, mat_open: nil}} = socket),
+    do: MaterialsView.load(socket)
 
   def refresh(socket), do: socket
 
@@ -187,7 +198,10 @@ defmodule Bezalel.Views.Helpers do
       menu: nil,
       toast: nil,
       switched: false,
-      draft: ""
+      draft: "",
+      # The chips were for the conversation left; they stay in Materials.
+      attachments: [],
+      transcripts: %{}
     )
     |> Socket.assign(:expanded, expanded)
     |> Socket.assign(:tab, :study)

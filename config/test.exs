@@ -23,3 +23,12 @@ config :rho,
 # Wi-Fi unless a test says otherwise (Bezalel.Test.Network).
 config :bezalel, :packs_manifest_url, "http://127.0.0.1:9/packs/manifest.json"
 config :bezalel, :network_state, {Bezalel.Test.Network, :state, []}
+
+# Materials: the phone's pickers, camera, microphone and voice are recorded
+# instead of called (Bezalel.Test.Native), Whisper answers from a script
+# (Bezalel.Test.Whisper), and mob_media decodes WAV for real and scripted
+# answers for anything else (MobMedia.Engine.Fake). The store's directories
+# are set in test_helper.exs (under the run's temp data dir).
+config :bezalel, :native, Bezalel.Test.Native
+config :bezalel, :whisper, Bezalel.Test.Whisper
+config :mob_media, engine: MobMedia.Engine.Fake

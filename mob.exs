@@ -45,13 +45,25 @@ config :mob_dev,
 # its native code, permissions, and any demo screens at build time. Drop a name
 # here to deactivate a plugin without removing the dep; remove both to drop it
 # entirely (the native build shrinks and a clean rebuild prunes its artifacts).
-config :mob, :plugins, [:mob_secure_store, :mob_markdown]
+config :mob, :plugins, [
+  :mob_secure_store,
+  :mob_markdown,
+  # Materials: the photo library, the camera, dictation (the platform
+  # recogniser), Whisper on the phone (recordings, dictation's fallback) and
+  # the media helpers (compressed audio and video to PCM, a video's frames).
+  :mob_photos,
+  :mob_camera,
+  :mob_speech,
+  :mob_whisper,
+  :mob_media
+]
 
 # mob_secure_store (the Keychain / Keystore rho keeps sign-ins and API keys
-# in) and mob_markdown (the native Markdown view replies render in) aren't
-# released, so their checkouts are unsigned: build them anyway. Once they're
-# on Hex, drop this and add them to :trusted_plugins below.
-config :mob, :acknowledge_unsafe_plugins, [:mob_secure_store, :mob_markdown]
+# in), mob_markdown (the native Markdown view replies render in) and
+# mob_media (the media helpers) aren't released, so their checkouts are
+# unsigned: build them anyway. Once they're on Hex, drop them here (they are
+# already in :trusted_plugins below, or add them).
+config :mob, :acknowledge_unsafe_plugins, [:mob_secure_store, :mob_markdown, :mob_media]
 
 # Style packages: the app's look. mob_bezalel is the Bezalel design plugin
 # (themes, palette, fonts); boot applies its default, MobBezalel.Dark.
@@ -77,7 +89,10 @@ config :mob, :trusted_plugins, %{
   mob_photos: "ed25519:nc56w+1Kx0gIt/4EkHxnMZCKHMzp4+S5kS/HoSzEZkg=",
   mob_notify: "ed25519:nc56w+1Kx0gIt/4EkHxnMZCKHMzp4+S5kS/HoSzEZkg=",
   mob_mishka: "ed25519:nc56w+1Kx0gIt/4EkHxnMZCKHMzp4+S5kS/HoSzEZkg=",
-  mob_ash: "ed25519:nc56w+1Kx0gIt/4EkHxnMZCKHMzp4+S5kS/HoSzEZkg="
+  mob_ash: "ed25519:nc56w+1Kx0gIt/4EkHxnMZCKHMzp4+S5kS/HoSzEZkg=",
+  mob_speech: "ed25519:nc56w+1Kx0gIt/4EkHxnMZCKHMzp4+S5kS/HoSzEZkg=",
+  mob_whisper: "ed25519:nc56w+1Kx0gIt/4EkHxnMZCKHMzp4+S5kS/HoSzEZkg=",
+  mob_media: "ed25519:nc56w+1Kx0gIt/4EkHxnMZCKHMzp4+S5kS/HoSzEZkg="
 }
 
 if File.exists?(Path.join(__DIR__, "mob.local.exs")), do: import_config("mob.local.exs")

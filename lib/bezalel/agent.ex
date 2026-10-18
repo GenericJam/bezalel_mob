@@ -18,17 +18,24 @@ defmodule Bezalel.Agent do
   Asks `text` in `conversation_id`: the question goes into the
   conversation's session after what's there, and the reply follows it.
   `model` is a `Bezalel.Models` id. The loop's events go to `subscriber`.
-  Returns the loop's session id, which the events carry.
+  `attachments` are rho's (`Bezalel.Materials.attachments/4`: materials by
+  reference, with their texts). Returns the loop's session id, which the
+  events carry.
   """
   @callback ask(
               conversation_id :: integer(),
               text :: String.t(),
               model :: String.t(),
-              subscriber :: pid()
+              subscriber :: pid(),
+              attachments :: [map()]
             ) :: {:ok, String.t()} | {:error, term()}
 
-  @doc "Adds `text` to the reply in progress (rho's steering); `{:error, :idle}` without one."
-  @callback steer(conversation_id :: integer(), text :: String.t()) :: :ok | {:error, :idle}
+  @doc """
+  Adds `text` (and `attachments`) to the reply in progress (rho's
+  steering); `{:error, :idle}` without one.
+  """
+  @callback steer(conversation_id :: integer(), text :: String.t(), attachments :: [map()]) ::
+              :ok | {:error, :idle}
 
   @doc "Stops the reply in progress, if any."
   @callback stop(conversation_id :: integer()) :: :ok
@@ -52,14 +59,16 @@ defmodule Bezalel.Agent do
     impl() != nil and Enum.any?(account, fn {_provider, access} -> access.signed_in end)
   end
 
-  @doc "See the `c:ask/4` callback."
-  @spec ask(integer(), String.t(), String.t(), pid()) :: {:ok, String.t()} | {:error, term()}
-  def ask(conversation_id, text, model, subscriber),
-    do: impl().ask(conversation_id, text, model, subscriber)
+  @doc "See the `c:ask/5` callback."
+  @spec ask(integer(), String.t(), String.t(), pid(), [map()]) ::
+          {:ok, String.t()} | {:error, term()}
+  def ask(conversation_id, text, model, subscriber, attachments \\ []),
+    do: impl().ask(conversation_id, text, model, subscriber, attachments)
 
-  @doc "See the `c:steer/2` callback."
-  @spec steer(integer(), String.t()) :: :ok | {:error, :idle}
-  def steer(conversation_id, text), do: impl().steer(conversation_id, text)
+  @doc "See the `c:steer/3` callback."
+  @spec steer(integer(), String.t(), [map()]) :: :ok | {:error, :idle}
+  def steer(conversation_id, text, attachments \\ []),
+    do: impl().steer(conversation_id, text, attachments)
 
   @doc "See the `c:stop/1` callback."
   @spec stop(integer()) :: :ok

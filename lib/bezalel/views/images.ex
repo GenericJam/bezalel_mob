@@ -20,11 +20,31 @@ defmodule Bezalel.Views.Images do
 
   # ── Loading ──────────────────────────────────────────────────────────────
 
-  @doc "Starts making the open conversation's pictures that aren't made yet."
-  def load(socket), do: load(socket, Enum.flat_map(socket.assigns.messages, & &1.images))
+  @doc """
+  Starts making the open conversation's pictures that aren't made yet: the
+  session's own and the materials' (`material_images/1`).
+  """
+  def load(socket) do
+    images =
+      Enum.flat_map(socket.assigns.messages, &(&1.images ++ material_images(&1.materials)))
+
+    load(socket, images)
+  end
 
   @doc "Starts making `images` (at the chat's size) that aren't made yet."
   def load(socket, images), do: Enum.reduce(images, socket, &start(&2, &1, :chat))
+
+  @doc """
+  The pictures among a message's materials (`Bezalel.Library.Message`'s
+  `materials`, or `Bezalel.Materials.Material`s), as the chat's images:
+  keyed `"material/<id>"`, read from `Bezalel.MaterialStore`.
+  """
+  def material_images(materials) do
+    for %{kind: :image, id: id, mime: mime} <- materials, do: material_image(id, mime)
+  end
+
+  @doc "A material's picture as the chat's image."
+  def material_image(id, mime), do: %{key: "material/" <> id, material: id, mime: mime}
 
   defp start(socket, %{key: key} = image, size) do
     if Map.has_key?(socket.assigns.images, {key, size}) do
@@ -36,7 +56,9 @@ defmodule Bezalel.Views.Images do
     end
   end
 
-  # Runs in the async task: the picture's session is found by its key.
+  # Runs in the async task: a session's picture is found by its key.
+  defp make(%{material: _} = image, size), do: Images.prepare(nil, image, size)
+
   defp make(%{key: key} = image, size) do
     case key |> String.split("/") |> hd() |> Library.session_path_by_id() do
       nil -> {:error, :no_session}
@@ -224,6 +246,15 @@ defmodule Bezalel.Views.Images do
   end
 
   def pinch(_payload, socket), do: socket
+
+  # A material's picture is known by its key alone (the chat's, the
+  # Materials tab's); a session's is looked up among the messages.
+  defp find(_socket, "material/" <> id) do
+    case Bezalel.MaterialStore.fetch(id, %{}) do
+      {:ok, m} -> material_image(m.id, m.mime)
+      :error -> nil
+    end
+  end
 
   defp find(socket, key) do
     stream_images = Enum.flat_map(Map.values(socket.assigns.streams), & &1.images)

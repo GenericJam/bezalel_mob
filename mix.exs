@@ -31,8 +31,9 @@ defmodule Bezalel.MixProject do
       # 0.7.25+: bundles a style package's fonts (mob_bezalel's) in dev and
       # release builds (MOB-476, MOB-480).
       {:mob_dev, "~> 0.7.29", only: :dev, runtime: false},
-      # The design plugin (style package): Bezalel's themes, palette, fonts.
-      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "1f2d2df505a08dd535f9c63e49d34150cf231ee1"),
+      # The design plugin (style package): Bezalel's themes, palette, fonts,
+      # icons and composites (the composer's + / mic slots and chips).
+      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "f5d2d5b77413b6c4c69603e36461e5fea48d7268"),
       # Native Markdown views (Markwon / Foundation) for replies and tool
       # results. Unreleased: pinned to a commit.
       sibling(
@@ -42,15 +43,30 @@ defmodule Bezalel.MixProject do
       ),
       {:ecto_sqlite3, "~> 0.18"},
       # The study tools, their pack access, the system prompt and the agent's
-      # surface (reply blocks, passage card, transcript), shared with the
-      # website (bezalel_ca). Unreleased: pinned to a commit.
+      # surface (reply blocks, passage card, transcript), Bezalel.Materials,
+      # Bezalel.Speech and draw_image, shared with the website (bezalel_ca).
+      # Unreleased: pinned to a commit.
       sibling(
         :bezalel_core,
         "GenericJam/bezalel_core",
-        "d00f948a3cfb8e049f5b4a907ef1fc26a1d8090e"
+        "f889d4d78c8061fd4f15b2a62c14765ed5c3dd87"
       ),
-      # The agent core: models, sign-in, usage, Dyn.
-      sibling(:rho, "~> 0.1"),
+      # The agent core: models, sign-in, usage, Dyn. Pinned to a commit until
+      # its next release carries attachments by reference (GenericJam/rho#1);
+      # then {:rho, "~> 0.2"}. Overrides bezalel_core's pin of the same ref.
+      sibling(:rho, "GenericJam/rho", "09cf5ae8a1f795c4a8780d795aff2e1e3a7be4bd", override: true),
+      # Materials: the photo library, the camera, live dictation (the
+      # platform recogniser) and Whisper on the phone (recordings, dictation's
+      # fallback). Signed plugins from Hex, activated in mob.exs.
+      {:mob_photos, "~> 0.2.2"},
+      {:mob_camera, "~> 0.1.14"},
+      {:mob_speech, "~> 0.1.1"},
+      {:mob_whisper, "~> 0.1.2"},
+      # A media file's length and size, its audio as 16 kHz PCM for Whisper
+      # (compressed audio, a video's audio track) and a video's frames (the
+      # stills). Unreleased: pinned to a commit.
+      {:mob_media,
+       github: "GenericJam/mob_media", ref: "6f9422d8c64d5a7c23d66f088786e7dbfbfbb91c"},
       # The platform secure store (Keychain / Keystore) rho keeps the
       # sign-ins and API keys in. Unreleased: pinned to a commit.
       sibling(
@@ -96,19 +112,16 @@ defmodule Bezalel.MixProject do
   end
 
   # A dependency developed alongside Bezalel. Unreleased ones come from
-  # GitHub, pinned to a commit, so a fresh clone builds; released ones from
-  # Hex. BEZALEL_LOCAL_DEPS uses sibling checkouts (../bezalel_core, ../rho,
-  # ../mob_secure_store, ../mob_bezalel, ../mob_markdown) instead, for
-  # working on them: 1 (or true) for all of them, or a comma-separated list
-  # of apps (BEZALEL_LOCAL_DEPS=bezalel_core,rho) for just those.
-  defp sibling(app, requirement) do
-    if local_dep?(app), do: {app, path: "../#{app}", override: true}, else: {app, requirement}
-  end
-
-  defp sibling(app, repo, ref) do
+  # GitHub, pinned to a commit, so a fresh clone builds. BEZALEL_LOCAL_DEPS
+  # uses sibling checkouts (../bezalel_core, ../rho, ../mob_secure_store,
+  # ../mob_bezalel, ../mob_markdown) instead, for working on them: 1 (or
+  # true) for all of them, or a comma-separated list of apps
+  # (BEZALEL_LOCAL_DEPS=bezalel_core,rho) for just those. `opts` go on the
+  # GitHub pin (e.g. override: true for one another sibling also pins).
+  defp sibling(app, repo, ref, opts \\ []) do
     if local_dep?(app),
       do: {app, path: "../#{app}", override: true},
-      else: {app, github: repo, ref: ref}
+      else: {app, [github: repo, ref: ref] ++ opts}
   end
 
   defp local_dep?(app) do

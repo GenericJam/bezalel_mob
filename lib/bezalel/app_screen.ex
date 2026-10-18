@@ -1,14 +1,28 @@
 defmodule Bezalel.AppScreen do
   @moduledoc """
-  The app: Study, Conversations, Workshop (and a built tool) and Settings
-  under one top bar and tab bar, with the sheets and the toast over them.
-  Each tab's view and events live in `Bezalel.Views.*`; this screen holds the
-  state and routes events to them.
+  The app: Study, Conversations, Materials, Workshop (and a built tool) and
+  Settings under one top bar and tab bar, with the sheets and the toast
+  over them. Each tab's view and events live in `Bezalel.Views.*`; this
+  screen holds the state and routes events to them, the native answers
+  for the composer's materials and dictation (`Bezalel.Views.Attach`)
+  included.
   """
   use Mob.Screen
 
   alias Bezalel.{Account, Library, Settings}
-  alias Bezalel.Views.{Conversations, Helpers, Images, Sheets, Study, StudyLibrary, Workshop}
+
+  alias Bezalel.Views.{
+    Attach,
+    Conversations,
+    Helpers,
+    Images,
+    Sheets,
+    Study,
+    StudyLibrary,
+    Workshop
+  }
+
+  alias Bezalel.Views.Materials, as: MaterialsView
   alias Bezalel.Views.Settings, as: SettingsView
   alias Mob.Theme.AdaptiveWatcher
   alias MobBezalel.{Palette, UI}
@@ -17,6 +31,7 @@ defmodule Bezalel.AppScreen do
   @tabs [
     {:study, "Study", :study},
     {:convs, "Conversations", :conversations},
+    {:materials, "Materials", :materials},
     {:workshop, "Workshop", :workshop},
     {:settings, "Settings", :settings}
   ]
@@ -90,8 +105,12 @@ defmodule Bezalel.AppScreen do
         tool_state: nil,
         tool_status: %{},
         change_of: nil,
-        code_open: false
+        code_open: false,
+        speaking: nil,
+        speaking_ref: nil,
+        read_aloud: Settings.read_aloud?()
       )
+      |> Mob.Socket.assign(Attach.assigns() ++ MaterialsView.assigns())
       |> Helpers.open_conversation(conversation)
       |> StudyLibrary.mount()
 
@@ -132,18 +151,31 @@ defmodule Bezalel.AppScreen do
     UI.top_bar(assigns.tool.name, assigns.cover, trailing: back)
   end
 
+  defp top_bar(%{tab: :materials, mat_open: %{}} = assigns) do
+    back = UI.bar_button("All materials", {self(), {:materials, :close}}, assigns.cover)
+    UI.top_bar("Materials", assigns.cover, trailing: back)
+  end
+
   defp top_bar(assigns) do
-    title = %{convs: "Conversations", workshop: "Workshop", settings: "Settings"}[assigns.tab]
+    title =
+      %{
+        convs: "Conversations",
+        materials: "Materials",
+        workshop: "Workshop",
+        settings: "Settings"
+      }[assigns.tab]
+
     UI.top_bar(title, assigns.cover)
   end
 
   defp body(%{tab: :study} = assigns), do: Study.render(assigns)
   defp body(%{tab: :convs} = assigns), do: Conversations.render(assigns)
+  defp body(%{tab: :materials} = assigns), do: MaterialsView.render(assigns)
   defp body(%{tab: :workshop} = assigns), do: Workshop.render(assigns)
   defp body(%{tab: :tool} = assigns), do: Workshop.render_tool(assigns)
   defp body(%{tab: :settings} = assigns), do: SettingsView.render(assigns)
 
-  defp active_index(:tool), do: 2
+  defp active_index(:tool), do: active_index(:workshop)
   defp active_index(tab), do: Enum.find_index(@tabs, fn {key, _, _} -> key == tab end)
 
   # Sits above the composer in Study, above the tab bar elsewhere.
@@ -187,6 +219,35 @@ defmodule Bezalel.AppScreen do
   def handle_info({:tap, {:tool, event}}, socket), do: Workshop.handle_tool(event, socket)
   def handle_info({:tap, {:settings, event}}, socket), do: SettingsView.handle(event, socket)
   def handle_info({:tap, {:packs, event}}, socket), do: StudyLibrary.handle(event, socket)
+  def handle_info({:tap, {:attach, event}}, socket), do: Attach.handle(event, socket)
+  def handle_info({:tap, {:materials, event}}, socket), do: MaterialsView.handle(event, socket)
+
+  # The native answers for the composer: permissions, pickers, the camera,
+  # the recorder, the recogniser, Whisper's model; and playback ending.
+  def handle_info({:permission, cap, result}, socket),
+    do: {:noreply, Attach.permission(cap, result, socket)}
+
+  def handle_info({:audio, event, _info}, socket)
+      when event in [:playback_finished, :playback_error],
+      do: {:noreply, MaterialsView.played(socket)}
+
+  def handle_info({tag, _event, _value} = message, socket)
+      when tag in [:photos, :camera, :files, :audio],
+      do: {:noreply, Attach.picked(message, socket)}
+
+  def handle_info({tag, :cancelled}, socket) when tag in [:photos, :camera, :files],
+    do: {:noreply, socket}
+
+  def handle_info({:speech, kind, value}, socket),
+    do: {:noreply, Attach.speech(kind, value, socket)}
+
+  def handle_info({:mob_whisper, :model, result}, socket),
+    do: {:noreply, Attach.model(result, socket)}
+
+  def handle_info({:attach, :tick}, socket), do: {:noreply, Attach.tick_recorder(socket)}
+
+  def handle_info({:speaking_done, ref}, %{assigns: %{speaking_ref: ref}} = socket),
+    do: {:noreply, Mob.Socket.assign(socket, speaking: nil, speaking_ref: nil)}
 
   # The notice in Study ("Now answering with …") shows after any change of
   # model, whichever tab it was made from, until the conversation changes.
@@ -277,4 +338,14 @@ defmodule Bezalel.AppScreen do
     do: {:noreply, Study.lexicon(strongs, result, socket)}
 
   def handle_async(:build, result, socket), do: {:noreply, Workshop.built(result, socket)}
+
+  def handle_async({:keep, _ref}, result, socket), do: {:noreply, Attach.kept(result, socket)}
+
+  def handle_async({:transcribe, id}, result, socket) do
+    socket = Attach.transcribed(id, result, socket)
+    {:noreply, MaterialsView.transcribed(id, socket)}
+  end
+
+  def handle_async({:prepare, cid, mode, text}, result, socket),
+    do: {:noreply, Attach.prepared({cid, mode, text}, result, socket)}
 end
