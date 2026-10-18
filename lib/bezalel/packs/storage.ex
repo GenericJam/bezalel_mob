@@ -6,8 +6,10 @@ defmodule Bezalel.Packs.Storage do
   that backs them up to iCloud. They live in `packs` under the app support
   directory (`Mob.Storage.dir(:app_support)`: Library/Application Support on
   iOS, `filesDir` on Android), and on iOS that directory is excluded from
-  backup. `Bezalel.Study.DB.dir/0` is the one function that names the
-  directory; `Bezalel.Packs` and the study tools both use it.
+  backup. `packs_dir/0` is the one function that names the directory;
+  bezalel_core reads it through `config :bezalel_core, :packs_dir`
+  (config/config.exs), so `Bezalel.Study.DB.dir/0`, which `Bezalel.Packs`
+  and the study tools both use, returns it.
 
   Builds before `bezalel-lac.3` kept the packs in `Mob.data_dir()/packs`,
   which on iOS is Documents (backed up). `prepare/1` moves them at startup;
@@ -44,6 +46,15 @@ defmodule Bezalel.Packs.Storage do
     if Code.ensure_loaded?(:mob_nif),
       do: Mob.Storage.dir(:app_support),
       else: Mob.data_dir()
+  end
+
+  @doc """
+  The packs directory: `config :bezalel, :study_packs_dir` when set (tests,
+  host scripts), else `packs` under `root/0`.
+  """
+  @spec packs_dir() :: Path.t()
+  def packs_dir do
+    Application.get_env(:bezalel, :study_packs_dir) || Path.join(root(), "packs")
   end
 
   @doc "Where builds before `bezalel-lac.3` kept the packs."

@@ -45,6 +45,7 @@ defmodule Bezalel.App do
     # first screen, whose first frame starts its clock to "stable". Live
     # names its loops in its own Registry.
     {:ok, _} = Application.ensure_all_started(:req_llm)
+    :ok = load_core()
     {:ok, _} = Rho.Supervisor.start_link(tools: Live.tools())
     boot = Rho.Dyn.boot()
     Logger.info("[dyn] boot: #{inspect(boot)}")
@@ -65,6 +66,30 @@ defmodule Bezalel.App do
 
     Mob.Screen.start_root(Bezalel.AppScreen)
     Mob.Dist.ensure_started(node: :"bezalel_android@127.0.0.1", cookie: :mob_secret)
+  end
+
+  @doc """
+  Loads bezalel_core's modules (the study tools and what they use). rho's
+  Dyn layer fixes its Core digest when it boots (`Rho.Dyn.Compiler.runtime/0`),
+  from the host app's modules (`config :rho, :dyn, app: :bezalel`) plus the
+  loaded ones under `Bezalel.`. The study code is bezalel_core's, so it's
+  loaded first: a change to any of it then re-checks the tools built in the
+  Workshop, as when it lived in this app. Call it before
+  `Rho.Supervisor.start_link/1`.
+  """
+  @spec load_core() :: :ok
+  def load_core do
+    _ = Application.load(:bezalel_core)
+
+    case Application.spec(:bezalel_core, :modules) do
+      nil ->
+        Logger.warning(
+          "[dyn] bezalel_core's .app isn't on the code path; its modules count when loaded"
+        )
+
+      modules ->
+        Code.ensure_all_loaded!(modules)
+    end
   end
 
   # Returns the path to the migrations directory for the current environment.

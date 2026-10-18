@@ -9,6 +9,15 @@ data_dir =
 File.mkdir_p!(data_dir)
 System.put_env("MOB_DATA_DIR", data_dir)
 
+# The study tools read bezalel_core's fixture packs (cut by
+# data/scripts/make_fixtures.py), never the real ones in data/out. They ship
+# in the dependency's checkout, so the path is found at run time.
+Application.put_env(
+  :bezalel,
+  :study_packs_dir,
+  Path.join(Mix.Project.deps_paths()[:bezalel_core], "test/fixtures/packs")
+)
+
 {:ok, _} = Application.ensure_all_started(:ecto_sqlite3)
 {:ok, _} = Bezalel.Repo.start_link()
 
@@ -41,10 +50,12 @@ redirect = fn provider ->
   "http://localhost:0" <> path
 end
 
-# As the app starts it (Bezalel.App): the study tools in the registry, and
-# the Dyn layer (config :rho, :dyn) on the temp data dir's dyn/, at
-# generation 0. Tests that build tools move it to a dir of their own
-# (Bezalel.Test.Dyn).
+# As the app starts it (Bezalel.App): bezalel_core's modules loaded (rho's
+# Dyn Core digest counts them), the study tools in the registry, and the Dyn
+# layer (config :rho, :dyn) on the temp data dir's dyn/, at generation 0.
+# Tests that build tools move it to a dir of their own (Bezalel.Test.Dyn).
+:ok = Bezalel.App.load_core()
+
 {:ok, _} =
   Rho.Supervisor.start_link(tools: Bezalel.Agent.Live.tools(), login: [redirect: redirect])
 

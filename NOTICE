@@ -3,12 +3,12 @@ Bezalel includes code and text from third parties.
 studybible-mcp
 https://github.com/djayatillake/studybible-mcp (commit 38cef28dc2d7c1e834cbd5248edc0f65843e7819)
 
-Bezalel's study tools (lib/bezalel/study/) are an Elixir port of its query
-layer, tool handlers and output formats (src/study_bible_mcp/database.py,
-tools.py, server.py), its tool descriptions, its hermeneutics guidance
-(hermeneutics.py) and its system prompt (prompts/system_prompt.md), adapted;
-data/scripts/make_fixtures.py mirrors its lexicon search, and
-priv/study/research_sources.json is its research-sources catalogue. Its licence:
+Bezalel's study tools are an Elixir port of its query layer, tool handlers
+and output formats; they live in bezalel_core
+(https://github.com/GenericJam/bezalel_core), whose NOTICE says what they
+take from it. In this repository, data/scripts/make_fixtures.py mirrors its
+lexicon search and data/build.sh runs its database build at that commit.
+Its licence:
 
   MIT License
 
@@ -32,6 +32,6 @@ priv/study/research_sources.json is its research-sources catalogue. Its licence:
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 
-The study data (the packs, and the test fixtures cut from them in
-test/fixtures/packs) carry their own licences and attributions: see
-data/SOURCES.md.
+The study data (the packs, and the test fixtures cut from them into
+bezalel_core's test/fixtures/packs) carry their own licences and
+attributions: see data/SOURCES.md.

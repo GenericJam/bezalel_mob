@@ -9,6 +9,11 @@ config :bezalel, ecto_repos: [Bezalel.Repo]
 # state persistence. Remove this line to disable screen state persistence.
 config :mob, :repo, Bezalel.Repo
 
+# Where the study packs are, for bezalel_core's study tools and the pack
+# downloads alike: Bezalel.Packs.Storage.packs_dir/0, resolved at run time
+# (on Android the app-support directory needs the activity).
+config :bezalel_core, :packs_dir, {Bezalel.Packs.Storage, :packs_dir, []}
+
 # rho, the agent core (models, sign-in, usage). It keeps its files in the
 # app's data dir and the sign-ins and API keys in the platform's secure store.
 config :rho,
