@@ -58,7 +58,7 @@ defmodule Bezalel.MixProject do
       # platform recogniser) and Whisper on the phone (recordings, dictation's
       # fallback). Signed plugins from Hex, activated in mob.exs.
       {:mob_photos, "~> 0.2.2"},
-      {:mob_camera, "~> 0.1.14"},
+      {:mob_camera, "~> 0.1.15"},
       {:mob_speech, "~> 0.1.1"},
       {:mob_whisper, "~> 0.1.2"},
       # A media file's length and size, its audio as 16 kHz PCM for Whisper
