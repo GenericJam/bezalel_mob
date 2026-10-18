@@ -21,7 +21,7 @@ defmodule Bezalel.Views.Materials do
 
   alias Bezalel.{Library, MaterialStore, Native}
   alias Bezalel.Materials.Material
-  alias Bezalel.Views.{Attach, Helpers, Images}
+  alias Bezalel.Views.{Attach, Helpers, Images, Stills}
   alias Mob.Socket
   alias MobBezalel.{Icons, UI}
 
@@ -172,6 +172,7 @@ defmodule Bezalel.Views.Materials do
           text_color={:muted}
         />
         {transcript(m, open, assigns)}
+        {stills(m, open, assigns)}
         {drawn_from(open)}
         {conversations(open.conversations)}
         <Row gap={10} fill_width={true}>
@@ -231,6 +232,36 @@ defmodule Bezalel.Views.Materials do
       )
     ]
   end
+
+  # A video's stills: each opens, or goes on the question as a chip.
+  defp stills(%Material{kind: :video} = m, open, assigns) do
+    pick = {self(), {:materials, {:stills, m.id}}}
+
+    tiles =
+      for s <- open.stills do
+        ask = {self(), {:materials, {:ask, s.id}}}
+
+        ~MOB"""
+        <Column gap={6} fill_width={false}>
+          {tile(s, assigns)}
+          {UI.pill_button("Ask", ask, :outline, height: 30, fill: false, text_size: 12)}
+        </Column>
+        """
+      end
+
+    list =
+      if tiles == [],
+        do: [],
+        else: [~MOB(<Wrap spacing={8} run_spacing={8} fill_width={true}>
+  {tiles}
+</Wrap>)]
+
+    [UI.kicker("Stills")] ++
+      list ++
+      [UI.pill_button("Pick a still", pick, :outline, height: 40, fill: false, text_size: 13)]
+  end
+
+  defp stills(_m, _open, _assigns), do: []
 
   defp drawn_from(%{drawings: []}), do: []
 
@@ -374,6 +405,13 @@ defmodule Bezalel.Views.Materials do
     end
   end
 
+  def handle({:stills, id}, socket) do
+    case MaterialStore.fetch(id, %{}) do
+      {:ok, %Material{kind: :video} = m} -> {:noreply, Stills.open(socket, m)}
+      _ -> {:noreply, socket}
+    end
+  end
+
   def handle({:transcribe, id}, socket) do
     case MaterialStore.fetch(id, %{}) do
       {:ok, m} -> {:noreply, Attach.transcribe(socket, m)}
@@ -403,12 +441,13 @@ defmodule Bezalel.Views.Materials do
           material: m,
           transcript: transcript(m, made),
           drawings: for(d <- made, d.derivation == :generated, do: d),
+          stills: for(d <- made, d.derivation == :still, do: d),
           conversations: Library.conversations_by_session(MaterialStore.sessions(id))
         }
 
         socket
         |> Socket.assign(mat_open: open, tab: :materials)
-        |> Images.load(Images.material_images([m | open.drawings]))
+        |> Images.load(Images.material_images([m | open.drawings ++ open.stills]))
 
       :error ->
         socket |> Socket.assign(:mat_open, nil) |> Helpers.toast("That material is gone.")

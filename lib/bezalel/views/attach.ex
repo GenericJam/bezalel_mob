@@ -31,7 +31,7 @@ defmodule Bezalel.Views.Attach do
 
   alias Bezalel.{Materials, MaterialStore, Models, Native, Transcribe}
   alias Bezalel.Materials.Material
-  alias Bezalel.Views.{Helpers, Images, Study}
+  alias Bezalel.Views.{Helpers, Images, Stills, Study}
   alias Mob.Socket
   alias MobBezalel.UI
 
@@ -158,7 +158,12 @@ defmodule Bezalel.Views.Attach do
 />),
       UI.menu_row(:image, "Photo library", "A photo or screenshot", tap.(:photos)),
       UI.menu_row(:camera, "Take a photo", "A page, an inscription, a map", tap.(:camera)),
-      UI.menu_row(:video, "Record a video", "Bezalel reads what's said in it", tap.(:video)),
+      UI.menu_row(
+        :video,
+        "Record a video",
+        "What's said in it, and stills you pick",
+        tap.(:video)
+      ),
       UI.menu_row(:audio, "Record audio", "A thought, a reading, a sermon", tap.(:record)),
       UI.menu_row(:file, "Files", "A PDF, a text file, a recording", tap.(:files))
     ]
@@ -179,7 +184,7 @@ defmodule Bezalel.Views.Attach do
       ~MOB(<Text text="About videos" font={:display} text_size={24} text_color={:on_background} />),
       ~MOB(<Text text={notice} text_size={14.5} line_height={1.55} text_color={:on_background} />),
       ~MOB(<Text
-  text="The video stays in Materials with its transcript."
+  text="The video stays in Materials with its transcript. Next, pick stills from it to show Bezalel."
   text_size={13}
   line_height={1.5}
   text_color={:muted}
@@ -555,6 +560,7 @@ defmodule Bezalel.Views.Attach do
     |> Socket.assign(:attachments, socket.assigns.attachments ++ added)
     |> Images.load(Images.material_images(added))
     |> transcribe_recordings(added)
+    |> offer_stills(added)
   end
 
   defp add_chips(socket, _cid, _materials) do
@@ -562,6 +568,22 @@ defmodule Bezalel.Views.Attach do
       socket,
       "It's kept in Materials. It wasn't added here: you'd moved to another conversation."
     )
+  end
+
+  # A video just added: its stills picker, each still kept also a chip;
+  # unless the user has gone on to something else meanwhile (another
+  # sheet, another tab), then only a word of where its stills are.
+  defp offer_stills(socket, added) do
+    case Enum.find(added, &(&1.kind == :video)) do
+      nil ->
+        socket
+
+      video when socket.assigns.sheet == nil and socket.assigns.tab == :study ->
+        Stills.open(socket, video, chip: true)
+
+      video ->
+        Helpers.toast(socket, "#{video.name} is added. Pick stills from it in Materials.")
+    end
   end
 
   defp keep_failed(socket, []), do: socket

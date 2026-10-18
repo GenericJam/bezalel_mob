@@ -7,7 +7,7 @@ defmodule Bezalel.Views.Sheets do
   import Mob.Sigil
 
   alias Bezalel.{Models, Scripture}
-  alias Bezalel.Views.{Attach, StudyLibrary, Workshop}
+  alias Bezalel.Views.{Attach, Stills, StudyLibrary, Workshop}
   alias MobBezalel.UI
 
   @doc "The sheet for `assigns.sheet`, or nothing."
@@ -17,10 +17,11 @@ defmodule Bezalel.Views.Sheets do
     style = UI.sheet_style()
     dismiss = {self(), :sheet}
     content = content(assigns.sheet, assigns)
+    detents = detents(assigns.sheet)
 
     ~MOB"""
     <Sheet
-      detents={[:medium, :large]}
+      detents={detents}
       on_dismiss={dismiss}
       background={style.background}
       corner_radius={style.corner_radius}
@@ -46,10 +47,15 @@ defmodule Bezalel.Views.Sheets do
     """
   end
 
+  # The stills picker opens tall: its frame, scrubber and Keep in view.
+  defp detents({:stills, _video_id}), do: [:large]
+  defp detents(_sheet), do: [:medium, :large]
+
   defp content(:approve_build, assigns), do: Workshop.approve_sheet(assigns)
   defp content(:packs_offer, assigns), do: StudyLibrary.offer(assigns)
   defp content(:attach, _assigns), do: Attach.menu_sheet()
   defp content({:video_notice, source}, _assigns), do: Attach.video_sheet(source)
+  defp content({:stills, _video_id}, assigns), do: Stills.sheet(assigns)
 
   defp content({:delete_material, id}, _assigns) do
     confirm = {self(), {:materials, {:confirm_delete, id}}}

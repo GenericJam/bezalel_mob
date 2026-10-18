@@ -333,10 +333,13 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   thumbnails in the cache dir), the composer's + menu, chips, recorder and
   dictation (`Bezalel.Views.Attach`), the tab and materials in messages
   (`Bezalel.Views.Materials`), transcripts (`Bezalel.Transcribe`: WAV in
-  Elixir, the rest through mob_media, then Whisper), read aloud (Study's
-  speaker, Settings → Voice). Native calls go through `Bezalel.Native`;
-  tests use `test/support/materials_fakes.ex`, MobSpeech's and MobMedia's
-  Fake engines. A stored question's materials are sent again on Try again.
+  Elixir, the rest through mob_media, then Whisper), video stills
+  (`Bezalel.Views.Stills`: a scrubber over `MobMedia.frame/3`, a still is a
+  `:still` derivative; decisions/2026-10-18-video-stills.md), read aloud
+  (Study's speaker, Settings → Voice). Native calls go through
+  `Bezalel.Native`; tests use `test/support/materials_fakes.ex`, MobSpeech's
+  and MobMedia's Fake engines. A stored question's materials are sent again
+  on Try again.
 - Data: `Bezalel.Library`: each conversation's transcript is its rho
   session (JSONL in `Rho.Session.dir/0`, read by bezalel_core's
   `Bezalel.Library.Transcript`; Delete and Undo are branch moves), SQLite
