@@ -2,11 +2,13 @@ defmodule Bezalel.Account do
   @moduledoc """
   What Settings shows of the user's model access, read from rho: per
   provider, the sign-in or API key (`Rho.Auth`, kept in the secure store),
-  and the tokens the model calls used (`Rho.Usage`). Keys never leave
-  here whole: `status/0` carries a masked form only.
+  and rho's usage record (`Rho.Usage`), which bezalel_core's
+  `Bezalel.Usage` lays out. Keys never leave here whole: `status/0`
+  carries a masked form only.
   """
 
   alias Rho.Auth
+  alias Rho.Usage.Fetch
 
   @subscriptions [:anthropic, :openai_codex]
   @api_keys [:anthropic, :openai, :google]
@@ -69,36 +71,28 @@ defmodule Bezalel.Account do
   def mask(_key), do: "••••••••"
 
   @doc """
-  Tokens per model (input, output and cache), today and in total, the
-  biggest total first: `[%{model, today, total}]`. Empty before any call.
-  Calls recorded under an alias or a dated snapshot of one catalog model
-  count as that model (`model` is then its catalog id).
+  rho's usage record (`Rho.Usage.load/1` of its data dir): the providers'
+  limit windows, the last rate limit, tokens and cost per model per day.
+  What `Bezalel.Usage`'s functions take as `state`.
   """
-  @spec usage(Date.t()) :: [
-          %{model: String.t(), today: non_neg_integer(), total: non_neg_integer()}
-        ]
-  def usage(today \\ Rho.Budget.today()) do
-    state = Rho.Usage.load(Rho.Config.data_dir())
-    day = Rho.Usage.by_model(state, today)
+  @spec usage() :: map()
+  def usage, do: Rho.Usage.load(Rho.Config.data_dir())
 
-    state
-    |> Rho.Usage.by_model(:total)
-    |> Enum.group_by(
-      fn {spec, _} -> spec |> Bezalel.Models.lookup() |> then(&((&1 && &1.id) || spec)) end,
-      fn {spec, counters} -> {tokens(day[spec]), tokens(counters)} end
-    )
-    |> Enum.map(fn {model, figures} ->
-      %{
-        model: model,
-        today: figures |> Enum.map(&elem(&1, 0)) |> Enum.sum(),
-        total: figures |> Enum.map(&elem(&1, 1)) |> Enum.sum()
-      }
-    end)
-    |> Enum.sort_by(&{-&1.total, &1.model})
+  @doc """
+  Asks each signed-in subscription's usage endpoint for its windows now
+  (`Rho.Usage.Fetch.refresh/3`; an API key has none). The record changes
+  (and `{:rho_usage, :changed}` follows) for each that answers; the rest
+  are `{provider, reason}` in the result. `config :bezalel, :usage_fetch`
+  is passed on as `Rho.Usage.Fetch`'s options (host tests answer for the
+  endpoint with `:respond`).
+  """
+  @spec refresh_usage(%{Auth.provider() => access()}) :: [{Auth.provider(), String.t()}]
+  def refresh_usage(status) do
+    opts = Application.get_env(:bezalel, :usage_fetch, [])
+
+    for provider <- @subscriptions,
+        match?(%{signed_in: true, type: :oauth}, status[provider]),
+        {:error, reason} <- [Fetch.refresh(Rho.Config.data_dir(), provider, opts)],
+        do: {provider, reason}
   end
-
-  defp tokens(nil), do: 0
-
-  defp tokens(counters),
-    do: Enum.sum(for k <- ~w(input output cacheRead cacheWrite), do: counters[k] || 0)
 end
