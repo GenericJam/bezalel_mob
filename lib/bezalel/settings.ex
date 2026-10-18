@@ -47,6 +47,12 @@ defmodule Bezalel.Settings do
 
   def put_packs_offered, do: Mob.State.put(:bezalel_packs_offered, true)
 
+  @doc "Are finished replies read aloud (Settings → Voice)? Off until the user turns it on."
+  @spec read_aloud?() :: boolean()
+  def read_aloud?, do: Mob.State.get(:bezalel_read_aloud, false) == true
+
+  def put_read_aloud(on?) when is_boolean(on?), do: Mob.State.put(:bezalel_read_aloud, on?)
+
   @doc """
   The study preferences, normalised (`Bezalel.Study.Preferences.new/1`):
   the defaults for whatever isn't set or isn't valid.

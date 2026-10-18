@@ -19,9 +19,11 @@ Muster) applies on top.
 | **bezalel_mob** (this, GitHub GenericJam/bezalel_mob, public; was GenericJam/bezalel) | the phone app; `data/` builds the study packs | — |
 | **bezalel_core** (GenericJam/bezalel_core) | the study tools, their pack access, the corpus registry and the system prompt; the agent's surface (reply fold, passage card, transcript reading and branch moves); shared with the website (bezalel_ca); the fixture packs | GitHub, pinned (`sibling/3`) |
 | **mob_bezalel** (GenericJam/mob_bezalel) | the style package: themes, palette, fonts, UI composites | GitHub, pinned (`sibling/3`) |
-| **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn | Hex (`~> 0.1`, `sibling/2`) |
+| **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn | GitHub, pinned (09cf5ae, attachments by reference) with `override: true` until its next release |
 | **mob_secure_store** (GenericJam/mob_secure_store) | Keychain / Keystore secrets plugin | GitHub, pinned until on Hex |
 | **mob_markdown** (GenericJam/mob_markdown) | native Markdown views (replies, tool results) | GitHub, pinned until on Hex |
+| **mob_media** (GenericJam/mob_media) | media info, audio to PCM, video frames (Materials) | GitHub, pinned until on Hex (acknowledged unsigned in `mob.exs`) |
+| mob_photos, mob_camera, mob_speech, mob_whisper | photo library, camera, dictation, Whisper on the phone | Hex (signed) |
 | mob, mob_dev | the framework | Hex |
 
 `BEZALEL_LOCAL_DEPS=1` uses the sibling checkouts (`../bezalel_core`,
@@ -293,6 +295,12 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   uses to open at and follow the newest message), from mob_new 0.6.10. Keep
   them if you regenerate the native project. The iOS side of MOB-481 is in
   mob 0.9.18.
+- `mix mob.deploy --native` regenerates what the plugins add to the native
+  project: `priv/generated/`, `MobPluginBootstrap.kt`, the plugins' bridges
+  under `android/app/src/main/java/io/mob/<plugin>/` and the manifest's
+  `mob:plugin-permissions` block. They're committed (as for mob_markdown and
+  mob_secure_store), in the same commit as the plugin change that made them,
+  so the checked-in native project matches `mix.lock`.
 
 ## The plan
 
@@ -314,10 +322,21 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   release workflow publishes on a `@version` bump, with Kevin's OK) and bump
   the requirement if needed.
 
-- `Bezalel.AppScreen` is the whole app: Study, Conversations, Workshop (and a
-  built tool), Settings under one top bar and tab bar, plus the sheets and the
-  toast. It holds the state; each tab's view and events are in
-  `lib/bezalel/views/`. Events are `{:tap, {tab, event}}` tuples routed there.
+- `Bezalel.AppScreen` is the whole app: Study, Conversations, Materials,
+  Workshop (and a built tool), Settings under one top bar and tab bar, plus
+  the sheets and the toast. It holds the state; each tab's view and events
+  are in `lib/bezalel/views/`. Events are `{:tap, {tab, event}}` tuples
+  routed there.
+- **Materials** (decisions/2026-10-18-materials-on-the-phone.md; core's
+  `Bezalel.Materials`): `Bezalel.MaterialStore` (table + files under
+  `materials/` in app support, backed up; models' picture copies and
+  thumbnails in the cache dir), the composer's + menu, chips, recorder and
+  dictation (`Bezalel.Views.Attach`), the tab and materials in messages
+  (`Bezalel.Views.Materials`), transcripts (`Bezalel.Transcribe`: WAV in
+  Elixir, the rest through mob_media, then Whisper), read aloud (Study's
+  speaker, Settings → Voice). Native calls go through `Bezalel.Native`;
+  tests use `test/support/materials_fakes.ex`, MobSpeech's and MobMedia's
+  Fake engines. A stored question's materials are sent again on Try again.
 - Data: `Bezalel.Library`: each conversation's transcript is its rho
   session (JSONL in `Rho.Session.dir/0`, read by bezalel_core's
   `Bezalel.Library.Transcript`; Delete and Undo are branch moves), SQLite

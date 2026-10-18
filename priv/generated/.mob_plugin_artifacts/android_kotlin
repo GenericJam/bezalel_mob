@@ -1,2 +1,6 @@
 android/app/src/main/java/io/mob/securestore/MobSecureStoreBridge.kt
 android/app/src/main/java/io/mob/markdown/MobMarkdown.kt
+android/app/src/main/java/io/mob/photos/MobPhotosBridge.kt
+android/app/src/main/java/io/mob/camera/MobCameraBridge.kt
+android/app/src/main/java/io/mob/speech/MobSpeechBridge.kt
+android/app/src/main/java/io/mob/media/MobMediaBridge.kt

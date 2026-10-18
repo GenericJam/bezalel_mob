@@ -9,6 +9,14 @@ data_dir =
 File.mkdir_p!(data_dir)
 System.put_env("MOB_DATA_DIR", data_dir)
 
+# Materials and the models' copies of pictures, under the run's data dir;
+# the phone's native calls recorded per test (Bezalel.Test.Native), Whisper
+# scripted (Bezalel.Test.Whisper).
+Application.put_env(:bezalel, :materials_dir, Path.join(data_dir, "materials"))
+Application.put_env(:bezalel, :materials_cache_dir, Path.join(data_dir, "materials_cache"))
+Bezalel.Test.Native.start()
+Bezalel.Test.Whisper.start()
+
 # The study tools read bezalel_core's fixture packs (cut by
 # data/scripts/make_fixtures.py), never the real ones in data/out. They ship
 # in the dependency's checkout, so the path is found at run time.

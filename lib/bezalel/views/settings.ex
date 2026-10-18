@@ -58,6 +58,7 @@ defmodule Bezalel.Views.Settings do
       UI.card(
         [
           device_row("Conversations", "#{assigns.counts.conversations} stored", true),
+          device_row("Materials", "#{assigns.counts[:materials] || 0} kept", true),
           device_row("Tools", "#{assigns.counts.tools} built", true),
           device_row("Bible text (BSB)", "Exodus 31 sample", false)
         ],
@@ -70,6 +71,7 @@ defmodule Bezalel.Views.Settings do
       section("Appearance", [appearance]),
       section("Model", [model_row(model, assigns.account, models_tap), note(model_note)]),
       section("Study", study(assigns)),
+      section("Voice", voice(assigns)),
       section("Study library", StudyLibrary.render(assigns)),
       section("Token usage", [usage]),
       section("On this phone", [on_phone]),
@@ -111,6 +113,32 @@ defmodule Bezalel.Views.Settings do
       {children}
     </Column>
     """
+  end
+
+  # Read aloud and dictation.
+  defp voice(assigns) do
+    read_opts = [
+      {"On", {self(), {:settings, {:read_aloud, true}}}},
+      {"Off", {self(), {:settings, {:read_aloud, false}}}}
+    ]
+
+    [
+      UI.card(
+        [
+          field("Read replies aloud"),
+          UI.segmented(read_opts, if(assigns.read_aloud, do: 0, else: 1)),
+          note(
+            "Each finished reply's summary is read in your phone's voice. The speaker beside any reply reads it whenever you like."
+          ),
+          field("Dictation"),
+          note(
+            "Tap the mic beside the question box to talk. Bezalel uses your phone's recogniser, or its own on the phone (a 60 MB download the first time), which also writes out recordings."
+          )
+        ],
+        padding: 16,
+        gap: 10
+      )
+    ]
   end
 
   # The study preferences (`Bezalel.Study.Preferences`): the choices in a
@@ -590,6 +618,11 @@ defmodule Bezalel.Views.Settings do
   def handle({:translation, key}, socket), do: {:noreply, put_study(socket, translation: key)}
   def handle({:limit, n}, socket), do: {:noreply, put_study(socket, limit: n)}
   def handle({:labels, show?}, socket), do: {:noreply, put_study(socket, scripture_labels: show?)}
+
+  def handle({:read_aloud, on?}, socket) do
+    Settings.put_read_aloud(on?)
+    {:noreply, Socket.assign(socket, :read_aloud, on?)}
+  end
 
   # The screens tell this one (`study_changed/1`) when they store a change.
   def handle(:approach, socket),

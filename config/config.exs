@@ -19,6 +19,12 @@ config :bezalel_core, :packs_dir, {Bezalel.Packs.Storage, :packs_dir, []}
 # Mob.State (Bezalel.Settings).
 config :bezalel_core, :preferences, {Bezalel.Settings, :study_preferences, []}
 
+# Materials (photos, recordings, files, drawings) are kept by the app's
+# store (Bezalel.MaterialStore: a table and files in app support); rho
+# fetches a sent picture's bytes through bezalel_core's resolver when it
+# calls a model (sessions keep references, not bytes).
+config :bezalel_core, :materials, Bezalel.MaterialStore
+
 # rho, the agent core (models, sign-in, usage). It keeps its files in the
 # app's data dir and the sign-ins and API keys in the platform's secure store.
 config :rho,
@@ -32,6 +38,8 @@ config :rho,
     switch_model: "in Bezalel's Settings",
     approve: "in the Workshop, where they see what it adds and tap Approve"
   ]
+
+config :rho, :resolve_attachment, {Bezalel.Materials, :resolve, []}
 
 # The Dyn layer: the study tools the Workshop builds (Bezalel.Workshop,
 # decisions/2026-10-15-workshop-on-dyn.md). The namespace names the

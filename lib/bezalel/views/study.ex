@@ -21,10 +21,11 @@ defmodule Bezalel.Views.Study do
   """
   import Mob.Sigil
 
-  alias Bezalel.{Agent, Library, Models, Scripture}
+  alias Bezalel.{Agent, Library, MaterialStore, Models, Native, Scripture}
   alias Bezalel.Agent.{Card, Reply, Storyboard}
   alias Bezalel.Study.{DB, Lexicon}
-  alias Bezalel.Views.{Helpers, Images}
+  alias Bezalel.Views.{Attach, Helpers, Images}
+  alias Bezalel.Views.Materials, as: MaterialsView
   alias Mob.Socket
   alias MobBezalel.{Icons, UI}
   alias Rho.Session
@@ -51,8 +52,8 @@ defmodule Bezalel.Views.Study do
     build_tap = {self(), {:study, :build_from_chat}}
     hammer = Icons.icon(:hammer, 18, :secondary)
 
-    composer_opts =
-      if Reply.running?(stream), do: [stop: {self(), {:study, :stop}}], else: []
+    stop = if Reply.running?(stream), do: [stop: {self(), {:study, :stop}}], else: []
+    composer_opts = stop ++ Attach.composer_opts(assigns)
 
     ~MOB"""
     <Column weight={1} fill_width={true}>
@@ -159,6 +160,7 @@ defmodule Bezalel.Views.Study do
     <Column gap={6} fill_width={true}>
       {bubble}
       {Images.render(m.images, assigns)}
+      {MaterialsView.in_message(m.materials, assigns)}
       <Box align="top_trailing" fill_width={true}>
         {actions(m, assigns, nil)}
       </Box>
@@ -175,6 +177,7 @@ defmodule Bezalel.Views.Study do
       {passage(m.passage)}
       {card(m.card)}
       {Images.render(m.images, assigns)}
+      {MaterialsView.in_message(m.materials, assigns)}
       {image(m)}
       {actions(m, assigns, Models.attribution(m.model))}
     </Column>
@@ -182,7 +185,8 @@ defmodule Bezalel.Views.Study do
   end
 
   # The reply streaming in (or failed): its blocks, card and pictures so
-  # far, the messages waiting to steer it, and its error.
+  # far (a drawing among them), the messages waiting to steer it, and its
+  # error.
   defp live(nil, _blocks, _assigns), do: []
 
   defp live(r, blocks, assigns) do
@@ -195,6 +199,7 @@ defmodule Bezalel.Views.Study do
       {blocks}
       {card(r.card)}
       {Images.render(r.images, assigns)}
+      {MaterialsView.in_message(r.materials, assigns)}
       {pending}
       {failure(r)}
     </Column>
@@ -444,13 +449,88 @@ defmodule Bezalel.Views.Study do
   {more}
 </Box>)
 
-    items = if model_name, do: name ++ [tap_target | chips], else: chips ++ [tap_target]
+    items =
+      if model_name,
+        do: name ++ speaker(m, assigns) ++ [tap_target | chips],
+        else: chips ++ [tap_target]
 
     ~MOB"""
     <Row gap={4} align={:center} fill_width={false}>
       {items}
     </Row>
     """
+  end
+
+  # Read aloud: a reply with a summary has a speaker beside its ⋯; while
+  # it's being read, a stop.
+  defp speaker(m, assigns) do
+    if Enum.any?(m.blocks, &(&1["id"] == "sum")) do
+      speaker_button(m, assigns)
+    else
+      []
+    end
+  end
+
+  defp speaker_button(m, assigns) do
+    speaking? = assigns.speaking == m.id
+    glyph = Icons.icon(if(speaking?, do: :stop, else: :speaker), 16, :muted)
+    tap = {self(), {:study, {:speak, m.id}}}
+
+    [
+      ~MOB(<Box id={"speak-" <> m.id} width={32} height={28} align="center" fill_width={false} on_tap={tap}>
+  {glyph}
+</Box>)
+    ]
+  end
+
+  @doc "What reading `m` aloud says: its summary, made speakable (`Bezalel.Speech.speakable/1`)."
+  def speakable(%{blocks: blocks}) do
+    blocks
+    |> Enum.filter(&(&1["id"] == "sum"))
+    |> Enum.map_join("\n\n", &summary_text/1)
+    |> Bezalel.Speech.speakable()
+  end
+
+  def speakable(_message), do: ""
+
+  @doc """
+  Reads `text` aloud (the platform's voice, `Bezalel.Native.speak/2`) as
+  message `id`'s: what was being read stops first. The voice doesn't say
+  when it's done, so `:speaking` clears after about as long as the reading
+  takes (`{:speaking_done, ref}`), or at the next tap.
+  """
+  def speak(socket, _id, ""), do: socket
+
+  def speak(socket, id, text) do
+    ref = make_ref()
+    Process.send_after(self(), {:speaking_done, ref}, reading_ms(text))
+
+    socket
+    |> Native.stop_speaking()
+    |> Native.speak(text)
+    |> Socket.assign(speaking: id, speaking_ref: ref)
+  end
+
+  # About 14 characters a second, as the platform voices read at their
+  # default rate.
+  defp reading_ms(text), do: div(String.length(text) * 1000, 14) + 1500
+
+  # A finished live reply (found as `store/4` finds it), read aloud if the
+  # user asked.
+  defp read_aloud(socket, cid, %Reply{seen: [first | _]}) do
+    with true <- socket.assigns.read_aloud,
+         true <- cid == socket.assigns.conversation.id,
+         %{} = m <- Enum.find(socket.assigns.messages, &(first in &1.entries)) do
+      speak(socket, m.id, speakable(m))
+    else
+      _ -> socket
+    end
+  end
+
+  defp read_aloud(socket, _cid, _reply), do: socket
+
+  defp auto_speak(socket, message) do
+    if socket.assigns.read_aloud, do: speak(socket, message.id, speakable(message)), else: socket
   end
 
   @doc "The top bar's trailing control: Expand all / Collapse all."
@@ -475,29 +555,58 @@ defmodule Bezalel.Views.Study do
     end
   end
 
+  # Something is still being added, recorded, dictated or made ready.
+  defp composer_busy?(a),
+    do: a.preparing != nil or a.keeping > 0 or a.recorder != nil or a.dictation != nil
+
+  defp still_sending(socket, what, opts \\ []),
+    do: Helpers.toast(socket, "A question is still on its way. #{what} once it's gone.", opts)
+
   # ── Events ────────────────────────────────────────────────────────────────
 
   @doc """
   Handles a Study event. Sending while a live reply streams steers it;
   while a scripted reply is on its way it waits (the draft stays), so
-  replies come back in the order they were asked.
+  replies come back in the order they were asked. The question leaves the
+  composer as it's sent; one with materials goes once they're ready for
+  the model (`Bezalel.Views.Attach.prepare/4`, then `send_prepared/5`),
+  and comes back to the composer if it can't go. Meanwhile, and while
+  something is still being added, sending waits.
   """
   def handle(:send, socket) do
     text = String.trim(socket.assigns.draft)
     cid = socket.assigns.conversation.id
+    a = socket.assigns
 
     cond do
-      text == "" ->
+      text == "" and a.attachments == [] ->
         {:noreply, socket}
 
-      Reply.running?(socket.assigns.streams[cid]) ->
-        {:noreply, steer(socket, cid, text)}
+      composer_busy?(a) ->
+        {:noreply, socket}
 
-      Helpers.replying?(socket.assigns) ->
+      Reply.running?(a.streams[cid]) ->
+        {:noreply, socket |> Socket.assign(draft: "", menu: nil) |> Attach.prepare(:steer, text)}
+
+      Helpers.replying?(a) ->
         {:noreply, socket}
 
       true ->
-        {:noreply, ask(socket, text)}
+        {:noreply, socket |> Socket.assign(draft: "", menu: nil) |> Attach.prepare(:ask, text)}
+    end
+  end
+
+  # Read aloud (`Bezalel.Speech.speakable/1`); a second tap stops it. The
+  # platform voice says nothing when it's done, so the stop shows for about
+  # as long as the reading takes.
+  def handle({:speak, id}, %{assigns: %{speaking: id}} = socket) do
+    {:noreply, socket |> Native.stop_speaking() |> Socket.assign(:speaking, nil)}
+  end
+
+  def handle({:speak, id}, socket) do
+    case Enum.find(socket.assigns.messages, &(&1.id == id)) do
+      nil -> {:noreply, socket}
+      m -> {:noreply, speak(socket, id, speakable(m))}
     end
   end
 
@@ -506,13 +615,15 @@ defmodule Bezalel.Views.Study do
     {:noreply, socket}
   end
 
+  # Not while a question is being made ready: it goes first (and its
+  # reply would take this one's place).
   def handle(:retry, socket) do
     cid = socket.assigns.conversation.id
 
-    if Reply.running?(socket.assigns.streams[cid]) do
-      {:noreply, socket}
-    else
-      {:noreply, socket |> release(cid) |> drop_stream(cid) |> respond()}
+    cond do
+      Reply.running?(socket.assigns.streams[cid]) -> {:noreply, socket}
+      socket.assigns.preparing != nil -> {:noreply, still_sending(socket, "Try again")}
+      true -> {:noreply, respond(socket)}
     end
   end
 
@@ -583,9 +694,16 @@ defmodule Bezalel.Views.Study do
   end
 
   def handle(:ask_again, socket) do
-    if Helpers.replying?(socket.assigns),
-      do: {:noreply, Socket.assign(socket, :toast, nil)},
-      else: {:noreply, socket |> Socket.assign(:toast, nil) |> respond()}
+    cond do
+      socket.assigns.preparing != nil ->
+        {:noreply, still_sending(socket, "Ask again", ask_again: true)}
+
+      Helpers.replying?(socket.assigns) ->
+        {:noreply, Socket.assign(socket, :toast, nil)}
+
+      true ->
+        {:noreply, socket |> Socket.assign(:toast, nil) |> respond()}
+    end
   end
 
   def handle({:word, key}, socket),
@@ -649,43 +767,91 @@ defmodule Bezalel.Views.Study do
     end
   end
 
+  @doc """
+  Sends a question whose materials are ready (`Bezalel.Views.Attach`):
+  `mode` `:ask` (a new question), `:steer` (into the reply streaming) or
+  `:again` (the last question asked anew, its materials sent again for the
+  model chosen now). Ask or steer is decided again now: a reply may have
+  started or ended while the materials were made ready. `cid` is the
+  conversation it was asked in: if the user has moved on meanwhile, it
+  isn't sent, and they're told (a question asked again keeps its Try
+  again there).
+  """
+  def send_prepared(socket, mode, text, attachments, cid \\ nil) do
+    %{id: open} = conversation = socket.assigns.conversation
+
+    cond do
+      cid != nil and cid != open and mode == :again ->
+        Helpers.toast(socket, "It wasn't asked again: you'd moved on. Try again from there.")
+
+      cid != nil and cid != open ->
+        Helpers.toast(
+          socket,
+          "That question wasn't sent: you'd moved on. Its materials are kept."
+        )
+
+      mode == :again ->
+        again(socket, attachments)
+
+      Reply.running?(socket.assigns.streams[open]) ->
+        steer(socket, open, text, attachments)
+
+      true ->
+        ask(socket, text, attachments, conversation)
+    end
+  end
+
   # Live, the loop writes the question into the session; scripted, it's
-  # written here and the storyboard answers it.
-  defp ask(socket, text) do
-    %{id: cid} = conversation = socket.assigns.conversation
-    socket = socket |> Socket.assign(draft: "", menu: nil) |> drop_stream(cid)
+  # written here and the storyboard answers it. (The composer was cleared
+  # when Send was tapped.)
+  defp ask(socket, text, attachments, %{id: cid} = conversation) do
+    socket = drop_stream(socket, cid)
 
     if Agent.live?(socket.assigns.account) do
-      socket |> respond_live(text) |> Helpers.reload_messages()
+      socket |> respond_live(text, attachments) |> Helpers.reload_messages()
     else
       socket = release(socket, cid)
-      {:ok, _} = Library.add_message(conversation, %{role: :user, text: text})
+
+      {:ok, _} =
+        Library.add_message(conversation, %{role: :user, text: text, attachments: attachments})
+
+      link(attachments, Library.get_conversation(cid))
       socket |> Helpers.reload_messages() |> respond_scripted()
     end
   end
 
-  defp steer(socket, cid, text) do
-    case Agent.steer(cid, text) do
+  defp steer(socket, cid, text, attachments) do
+    case Agent.steer(cid, text, attachments) do
       :ok ->
         reply = socket.assigns.streams[cid]
-
-        socket
-        |> Socket.assign(draft: "", menu: nil)
-        |> put_stream(cid, %{reply | pending: reply.pending ++ [text]})
+        link(attachments, reply.session_id)
+        put_stream(socket, cid, %{reply | pending: reply.pending ++ [text]})
 
       # The loop is gone (released meanwhile): ask afresh.
       {:error, :idle} ->
-        ask(socket, text)
+        ask(socket, text, attachments, socket.assigns.conversation)
     end
   end
+
+  # The materials a question went with also go with its conversation.
+  defp link(attachments, %Library.Conversation{session_id: sid}), do: link(attachments, sid)
+
+  defp link(attachments, session_id) when is_binary(session_id) do
+    for %{ref: ref} <- attachments, do: MaterialStore.link(ref, session_id)
+    :ok
+  end
+
+  defp link(_attachments, _none), do: :ok
 
   @doc """
   Asks again for the reply to the open conversation's last question (Try
   again, Ask again), bound to that conversation and the model chosen now:
   its result lands there even if the user has moved on. Live
   (`Bezalel.Agent.live?/1`), the question is taken back off the session
-  and asked anew, and the reply streams as loop events (`agent_event/3`);
-  without a model the storyboard's comes back through
+  and asked anew (its materials still kept made ready for the model first,
+  `Bezalel.Views.Attach.prepare/4`; until they are, the failed reply and
+  its Try again stay), and the reply streams as loop events
+  (`agent_event/3`); without a model the storyboard's comes back through
   `handle_async({:reply, ...})` (`replied/3`). Each conversation has at
   most one reply in flight, and replies in different conversations run
   side by side.
@@ -694,25 +860,54 @@ defmodule Bezalel.Views.Study do
     cid = socket.assigns.conversation.id
 
     if Agent.live?(socket.assigns.account) do
-      socket = release(socket, cid)
-
-      case Library.take_question(cid) do
-        {:ok, text} -> socket |> respond_live(text) |> Helpers.reload_messages()
-        :none -> Helpers.reload_messages(socket)
+      case Library.question(cid) do
+        nil -> again(socket, [])
+        question -> respond_again(socket, question)
       end
     else
-      respond_scripted(socket)
+      socket |> drop_stream(cid) |> respond_scripted()
     end
   end
 
-  defp respond_live(socket, text) do
+  # A material deleted since goes without it; a question that was only
+  # materials, all deleted, has nothing left to ask (its Try again stays).
+  defp respond_again(socket, %{text: text, materials: ids}) do
+    materials = for id <- ids, {:ok, m} <- [MaterialStore.fetch(id, %{})], do: m
+
+    cond do
+      materials != [] ->
+        Attach.prepare(socket, :again, "", materials)
+
+      ids != [] and String.trim(text) == "" ->
+        Helpers.toast(
+          socket,
+          "Its materials were deleted from Materials: there's nothing to ask again."
+        )
+
+      true ->
+        again(socket, [])
+    end
+  end
+
+  defp again(socket, attachments) do
+    cid = socket.assigns.conversation.id
+    socket = socket |> release(cid) |> drop_stream(cid)
+
+    case Library.take_question(cid) do
+      {:ok, text} -> socket |> respond_live(text, attachments) |> Helpers.reload_messages()
+      :none -> Helpers.reload_messages(socket)
+    end
+  end
+
+  defp respond_live(socket, text, attachments) do
     %{id: cid} = socket.assigns.conversation
     model = Helpers.model(socket)
 
     if Models.available?(model, socket.assigns.account) do
-      case Agent.ask(cid, text, model.id, self()) do
+      case Agent.ask(cid, text, model.id, self(), attachments) do
         {:ok, session_id} ->
           :ok = Library.touch(cid)
+          link(attachments, session_id)
 
           socket
           |> Socket.assign(:sessions, Map.put(socket.assigns.sessions, session_id, cid))
@@ -722,7 +917,7 @@ defmodule Bezalel.Views.Study do
           error = "The agent couldn't start: #{inspect(reason)}"
 
           socket
-          |> keep_question(cid, text)
+          |> keep_question(cid, text, attachments)
           |> put_stream(cid, Reply.failed(cid, model.id, error))
       end
     else
@@ -730,16 +925,20 @@ defmodule Bezalel.Views.Study do
         "#{model.name} needs a #{Models.needs(model.provider)}. Add one in Settings → " <>
           "Account, or choose a model you have access to."
 
-      socket |> keep_question(cid, text) |> put_stream(cid, Reply.failed(cid, model.id, error))
+      socket
+      |> keep_question(cid, text, attachments)
+      |> put_stream(cid, Reply.failed(cid, model.id, error))
     end
   end
 
   # A question no loop took in stays in the conversation, for Try again.
-  defp keep_question(socket, cid, text) do
+  defp keep_question(socket, cid, text, attachments) do
     socket = release(socket, cid)
 
-    with %Library.Conversation{} = conversation <- Library.get_conversation(cid) do
-      {:ok, _} = Library.add_message(conversation, %{role: :user, text: text})
+    with %Library.Conversation{} = conversation <- Library.get_conversation(cid),
+         {:ok, _} <-
+           Library.add_message(conversation, %{role: :user, text: text, attachments: attachments}) do
+      link(attachments, Library.get_conversation(cid))
     end
 
     socket
@@ -783,6 +982,7 @@ defmodule Bezalel.Views.Study do
         |> Socket.assign(:expanded, expanded)
         |> Helpers.reload_messages()
         |> Helpers.refresh()
+        |> auto_speak(message)
       else
         Helpers.refresh(socket)
       end
@@ -822,7 +1022,10 @@ defmodule Bezalel.Views.Study do
 
   defp on_event(cid, reply, event, socket) do
     reply = Reply.apply(reply, event)
-    socket |> put_stream(cid, reply) |> Images.load(reply.images)
+
+    socket
+    |> put_stream(cid, reply)
+    |> Images.load(reply.images ++ Images.material_images(reply.materials))
   end
 
   # The loop took a steering message in: the reply so far is done (the
@@ -835,9 +1038,11 @@ defmodule Bezalel.Views.Study do
   # them next, as a new run; at its limits (`:max_iterations`, `:cost_cap`)
   # it drops them, so they go back. A message steered in after the limit's
   # end may have started a run the screen won't follow: the loop goes too.
+  # A finished reply in the open conversation is read aloud when the user
+  # asked for that (Settings → Voice).
   defp finish(socket, cid, %Reply{status: :done, reason: reason} = reply)
        when reply.pending == [] or reason in [:max_iterations, :cost_cap] do
-    socket = store(socket, cid, reply, nil)
+    socket = socket |> store(cid, reply, nil) |> read_aloud(cid, reply)
 
     socket =
       if reply.pending == [], do: release_if_unused(socket, cid), else: release(socket, cid)
@@ -845,8 +1050,11 @@ defmodule Bezalel.Views.Study do
     unsend(socket, cid, reply.pending)
   end
 
-  defp finish(socket, cid, %Reply{status: :done} = reply),
-    do: store(socket, cid, reply, %{Reply.continue(reply, "") | pending: reply.pending})
+  defp finish(socket, cid, %Reply{status: :done} = reply) do
+    socket
+    |> store(cid, reply, %{Reply.continue(reply, "") | pending: reply.pending})
+    |> read_aloud(cid, reply)
+  end
 
   # Stopped: what streamed is kept (the loop wrote the cut-off turn). The
   # loop goes; the next question resumes the session.
@@ -887,6 +1095,7 @@ defmodule Bezalel.Views.Study do
 
       conversation ->
         for text <- texts,
+            String.trim(text) != "",
             do: {:ok, _} = Library.add_message(conversation, %{role: :user, text: text})
 
         Helpers.refresh(socket)
@@ -1005,6 +1214,7 @@ defmodule Bezalel.Views.Study do
 
     with %Library.Conversation{} = conversation <- Library.get_conversation(cid) do
       for text <- pending,
+          String.trim(text) != "",
           do: {:ok, _} = Library.add_message(conversation, %{role: :user, text: text})
     end
 

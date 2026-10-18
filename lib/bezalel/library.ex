@@ -22,7 +22,7 @@ defmodule Bezalel.Library do
   import Ecto.Query
 
   alias Bezalel.Agent.Storyboard
-  alias Bezalel.{Images, Models, Repo}
+  alias Bezalel.{Images, MaterialStore, Models, Repo}
   alias Bezalel.Library.{Conversation, Message, Tool, Transcript}
   alias Rho.Session
 
@@ -98,6 +98,17 @@ defmodule Bezalel.Library do
   @doc "How many conversations are on the shelf."
   @spec conversation_count() :: non_neg_integer()
   def conversation_count, do: Repo.aggregate(shelf(), :count)
+
+  @doc "The conversations on the shelf whose sessions are `session_ids`, in that order."
+  @spec conversations_by_session([String.t()]) :: [Conversation.t()]
+  def conversations_by_session(session_ids) do
+    found =
+      from(c in shelf(), where: c.session_id in ^session_ids)
+      |> Repo.all()
+      |> Map.new(&{&1.session_id, &1})
+
+    Enum.flat_map(session_ids, &List.wrap(found[&1]))
+  end
 
   @doc """
   Deletes a conversation: it's off the shelf now (the reads above don't
@@ -180,6 +191,10 @@ defmodule Bezalel.Library do
       File.rm_rf(Path.join([data, "artifacts", c.session_id]))
       File.rm(Path.join([data, "todos", c.session_id <> ".json"]))
     end
+
+    # Its materials stay in Materials (the user's own files); they just no
+    # longer say they went with it.
+    if c.session_id, do: MaterialStore.unlink_session(c.session_id)
 
     Repo.delete_all(from(x in Conversation, where: x.id == ^c.id))
     :ok
@@ -296,16 +311,21 @@ defmodule Bezalel.Library do
 
   @doc """
   Appends a message and marks the conversation active. `attrs` takes
-  `:role` plus `:text` (user), or `:blocks`, `:passage`, `:card`,
-  `:image`, `:model` (a reply Bezalel writes: the storyboard's). Returns
-  the message as the chat reads it. The conversation must have no loop.
+  `:role` plus `:text` and `:attachments` (user: rho's attachments,
+  `Bezalel.Materials.attachments/4`; a message may be only those), or
+  `:blocks`, `:passage`, `:card`, `:image`, `:model` (a reply Bezalel
+  writes: the storyboard's). Returns the message as the chat reads it. The
+  conversation must have no loop.
   """
   @spec add_message(Conversation.t(), map()) :: {:ok, Message.t()} | {:error, :empty}
-  def add_message(%Conversation{}, %{role: :user, text: text}) when text in [nil, ""],
-    do: {:error, :empty}
+  def add_message(%Conversation{} = conversation, %{role: :user} = attrs) do
+    text = attrs[:text] || ""
+    attachments = attrs[:attachments] || []
 
-  def add_message(%Conversation{} = conversation, %{role: :user, text: text}),
-    do: append(conversation, [Transcript.user(text)])
+    if text == "" and attachments == [],
+      do: {:error, :empty},
+      else: append(conversation, [Transcript.user(text, attachments: attachments)])
+  end
 
   def add_message(%Conversation{} = conversation, %{role: :agent} = attrs),
     do: append(conversation, [Transcript.reply(attrs)])
@@ -367,7 +387,8 @@ defmodule Bezalel.Library do
   @doc """
   Takes the last question back off the session, to ask it again (Try
   again, Ask again): `{:ok, text}`, or `:none` when the conversation
-  doesn't end in one. The conversation must have no loop.
+  doesn't end in one; its materials (`question/1`) are the
+  caller's to send again. The conversation must have no loop.
   """
   @spec take_question(integer()) :: {:ok, String.t()} | :none
   def take_question(conversation_id) do
@@ -382,6 +403,26 @@ defmodule Bezalel.Library do
       _ -> :none
     end
   end
+
+  @doc """
+  The conversation's last question: its typed text and the ids of the
+  materials it sent (what asking it again sends again), or `nil` when there
+  is none. Reads only.
+  """
+  @spec question(integer()) :: %{text: String.t(), materials: [String.t()]} | nil
+  def question(conversation_id) do
+    with %Conversation{session_file: file} = c when is_binary(file) <-
+           get_conversation(conversation_id),
+         {_session, branch} = open(c, Models.default()),
+         %{"message" => m} = entry <- last_question(branch) do
+      %{text: Session.typed(m), materials: [entry] |> Transcript.materials() |> Enum.map(& &1.id)}
+    else
+      _ -> nil
+    end
+  end
+
+  defp last_question(branch),
+    do: branch |> Enum.reverse() |> Enum.find(&match?(%{"message" => %{"role" => "user"}}, &1))
 
   @doc """
   Drops a failed reply's entries (after the last question) from the

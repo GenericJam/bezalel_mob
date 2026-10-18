@@ -19,7 +19,6 @@ defmodule Bezalel.Images do
   """
 
   alias Bezalel.Images.Codec
-  alias Bezalel.Library.Message
 
   # The chat's side margins (dp) and its tallest picture (dp).
   @margins 32
@@ -68,23 +67,31 @@ defmodule Bezalel.Images do
   end
 
   @doc """
-  The picture's file at `size`: made from the session at `session_path`
-  the first time, then from the cache. `{:error, reason}` when the entry
-  or its picture is gone or can't be read.
+  The picture's file at `size`: made the first time, then from the cache.
+  A session's picture (`Message.image()`) is read from the session at
+  `session_path`; a material's (`%{key: "material/<id>", material: id,
+  mime: mime}`) from `Bezalel.MaterialStore`, its copies kept under the
+  store's cache directory (`chat/`), not by session. `{:error, reason}`
+  when the entry, the material or its picture is gone or can't be read.
   """
-  @spec prepare(String.t(), Message.image(), size()) :: {:ok, ready()} | {:error, term()}
+  @spec prepare(String.t() | nil, map(), size()) :: {:ok, ready()} | {:error, term()}
   def prepare(session_path, image, size) do
     {w, h} = box(size)
     base = cache_base(image, w, h)
 
     case cached(base) do
       {:ok, _} = hit -> hit
-      :miss -> make(session_path, image, w, h, base)
+      :miss -> make(read(session_path, image), image.mime, w, h, base)
     end
   end
 
-  defp make(session_path, image, w, h, base) do
-    with {:ok, bytes} <- read_part(session_path, image.entry, image.index),
+  defp read(_session_path, %{material: id, mime: mime}),
+    do: File.read(Bezalel.MaterialStore.file(id, mime))
+
+  defp read(session_path, image), do: read_part(session_path, image.entry, image.index)
+
+  defp make(read, mime, w, h, base) do
+    with {:ok, bytes} <- read,
          {:ok, %{width: ow, height: oh}} <- Codec.info(bytes) do
       base = "#{base}.#{ow}x#{oh}"
 
@@ -93,7 +100,7 @@ defmodule Bezalel.Images do
           write(base <> ".png", data, tw, th, {ow, oh})
 
         {:original, %{width: ow, height: oh}} ->
-          write(base <> extension(image.mime, bytes), bytes, ow, oh, {ow, oh})
+          write(base <> extension(mime, bytes), bytes, ow, oh, {ow, oh})
 
         {:error, _} = error ->
           error
@@ -141,6 +148,9 @@ defmodule Bezalel.Images do
       _ -> :error
     end
   end
+
+  defp cache_base(%{material: id}, w, h),
+    do: Path.join([Bezalel.MaterialStore.cache_dir(), "chat", "#{id}-#{w}x#{h}"])
 
   defp cache_base(%{key: key}, w, h) do
     [session_id, entry, index] = String.split(key, "/")

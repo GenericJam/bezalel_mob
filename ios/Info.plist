@@ -54,7 +54,13 @@
         <string>remote-notification</string>
     </array>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Bezalel uses the microphone for audio recording.</string>
+    <string>Bezalel listens when you dictate a question or record audio to study, and only then.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Bezalel turns what you say into the words of your question.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Bezalel uses the camera when you take a photo or video to study, such as a page or an inscription.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Bezalel opens your photos when you choose one to study.</string>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIApplicationSceneManifest</key>

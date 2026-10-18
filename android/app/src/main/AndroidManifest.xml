@@ -64,8 +64,23 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="tel" />
         </intent>
+        <!-- Dictation (mob_speech's platform engine) and reading replies
+             aloud (Mob.Speech) find the system's recogniser and voice. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
     </queries>
 
+    <!-- mob:plugin-permissions BEGIN (managed — regenerated each build; do not edit) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- mob:plugin-permissions END -->
     <application
         android:label="Bezalel"
         android:icon="@mipmap/ic_launcher"
