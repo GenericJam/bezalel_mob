@@ -54,6 +54,37 @@ defmodule Bezalel.Settings do
   def put_read_aloud(on?) when is_boolean(on?), do: Mob.State.put(:bezalel_read_aloud, on?)
 
   @doc """
+  The voice replies are read in (Settings → Voice): `%{id, name, language}`
+  of a `Mob.Speech.voices/0` voice, or nil for the phone's default. The id
+  is this phone's; on another one, or once the voice is removed, the
+  platform falls back to a voice for its language or the default.
+  """
+  @spec voice() :: %{id: String.t(), name: String.t(), language: String.t()} | nil
+  def voice do
+    case Mob.State.get(:bezalel_voice) do
+      %{"id" => id, "name" => name, "language" => language} ->
+        %{id: id, name: name, language: language}
+
+      _default ->
+        nil
+    end
+  end
+
+  def put_voice(nil), do: Mob.State.delete(:bezalel_voice)
+
+  def put_voice(%{id: id, name: name, language: language}),
+    do: Mob.State.put(:bezalel_voice, %{"id" => id, "name" => name, "language" => language})
+
+  @doc "The `speak` options for the chosen voice (none for the default)."
+  @spec voice_opts() :: keyword()
+  def voice_opts do
+    case voice() do
+      %{id: id} -> [voice: id]
+      nil -> []
+    end
+  end
+
+  @doc """
   The study preferences, normalised (`Bezalel.Study.Preferences.new/1`):
   the defaults for whatever isn't set or isn't valid.
   """

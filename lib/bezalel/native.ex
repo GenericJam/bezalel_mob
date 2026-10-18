@@ -7,7 +7,8 @@ defmodule Bezalel.Native do
   use one that records each call). Each call answers as the plugin does:
   results come later as messages to the screen (`{:photos, :picked, …}`,
   `{:camera, :photo, …}`, `{:files, :picked, …}`, `{:audio, :recorded,
-  …}`, `{:permission, …}`), except `thumbnail/2`, which returns.
+  …}`, `{:permission, …}`, `{:speech, :done | :cancelled | :failed}`),
+  except `thumbnail/2` and `voices/0`, which return.
   """
 
   @callback pick_photos(Mob.Socket.t(), keyword()) :: Mob.Socket.t()
@@ -19,8 +20,9 @@ defmodule Bezalel.Native do
   @callback stop_recording(Mob.Socket.t()) :: Mob.Socket.t()
   @callback play(Mob.Socket.t(), Path.t()) :: Mob.Socket.t()
   @callback stop_playback(Mob.Socket.t()) :: Mob.Socket.t()
-  @callback speak(Mob.Socket.t(), String.t()) :: Mob.Socket.t()
+  @callback speak(Mob.Socket.t(), String.t(), keyword()) :: Mob.Socket.t()
   @callback stop_speaking(Mob.Socket.t()) :: Mob.Socket.t()
+  @callback voices() :: {:ok, [map()]} | {:error, :unavailable | :unsupported}
   @callback thumbnail(Path.t(), keyword()) :: {:ok, %{path: Path.t()}} | {:error, term()}
 
   @doc "The photo library's picker (mob_photos): `{:photos, :picked | :cancelled, …}`."
@@ -50,11 +52,22 @@ defmodule Bezalel.Native do
   @doc "Stops playing."
   def stop_playback(socket), do: impl().stop_playback(socket)
 
-  @doc "Says `text` with the platform's voice (`Mob.Speech`)."
-  def speak(socket, text), do: impl().speak(socket, text)
+  @doc """
+  Says `text` with the platform's voice (`Mob.Speech`), `voice:` a voice
+  id from `voices/0` (else the system default). The caller gets one
+  `{:speech, :done | :cancelled | :failed}` when it ends.
+  """
+  def speak(socket, text, opts \\ []), do: impl().speak(socket, text, opts)
 
-  @doc "Stops speaking."
+  @doc "Stops speaking: each utterance not yet ended sends `{:speech, :cancelled}`."
   def stop_speaking(socket), do: impl().stop_speaking(socket)
+
+  @doc """
+  The phone's text-to-speech voices (`Mob.Speech.voices/0`), sorted by
+  language, then quality. Blocks (on Android up to 5 s the first time):
+  call it from `start_async`.
+  """
+  def voices, do: impl().voices()
 
   @doc "A downscaled upright JPEG of a picture file (mob_photos), synchronous."
   def thumbnail(path, opts), do: impl().thumbnail(path, opts)
@@ -97,10 +110,13 @@ defmodule Bezalel.Native.Mob do
   def stop_playback(socket), do: Mob.Audio.stop_playback(socket)
 
   @impl true
-  def speak(socket, text), do: Mob.Speech.speak(socket, text)
+  def speak(socket, text, opts), do: Mob.Speech.speak(socket, text, opts)
 
   @impl true
   def stop_speaking(socket), do: Mob.Speech.stop_speaking(socket)
+
+  @impl true
+  def voices, do: Mob.Speech.voices()
 
   @impl true
   def thumbnail(path, opts) do

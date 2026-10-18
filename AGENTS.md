@@ -293,7 +293,10 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   flexing `<Spacer/>`) and MOB-481 (`<Scroll anchor="bottom">`, which Study
   uses to open at and follow the newest message), from mob_new 0.6.10. Keep
   them if you regenerate the native project. The iOS side of MOB-481 is in
-  mob 0.9.18.
+  mob 0.9.18. Its text-to-speech block (voices, voice ids, end-of-speech
+  events) and the `ttsAppContext` line in `init` are mob_new 0.6.14's, for
+  mob 0.9.22's `Mob.Speech.voices/0`; without them `voices/0` answers
+  `{:error, :unsupported}` on Android.
 - `mix mob.deploy --native` regenerates what the plugins add to the native
   project: `priv/generated/`, `MobPluginBootstrap.kt`, the plugins' bridges
   under `android/app/src/main/java/io/mob/<plugin>/` and the manifest's
@@ -335,7 +338,10 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   Elixir, the rest through mob_media, then Whisper), video stills
   (`Bezalel.Views.Stills`: a scrubber over `MobMedia.frame/3`, a still is a
   `:still` derivative; decisions/2026-10-18-video-stills.md), read aloud
-  (Study's speaker, Settings → Voice). Native calls go through
+  (Study's speaker and Read replies aloud, in the voice picked on Settings →
+  Voice, `Bezalel.VoiceScreen`, stored by `Bezalel.Settings.put_voice/1`;
+  the stop shows until each utterance's `{:speech, :done | :cancelled |
+  :failed}` has come back, counted in `speech_pending`). Native calls go through
   `Bezalel.Native`; tests use `test/support/materials_fakes.ex`, MobSpeech's
   and MobMedia's Fake engines. A stored question's materials are sent again
   on Try again. Chips belong to the composer, not a conversation: they stay

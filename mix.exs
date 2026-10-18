@@ -24,10 +24,11 @@ defmodule Bezalel.MixProject do
 
   defp deps do
     [
-      # 0.9.21+: Mob.Storage.exclude_from_backup/1 keeps the study packs out of
+      # 0.9.22+: Mob.Speech.voices/0, speak by voice id and end-of-speech
+      # events (Settings → Voice). 0.9.21+: Mob.Storage.exclude_from_backup/1 keeps the study packs out of
       # iCloud backup (bezalel-lac.3). 0.9.18+: the light/dark watcher follows
       # the OS (MOB-479) and <Scroll anchor="bottom"> renders on iOS (MOB-481).
-      {:mob, "~> 0.9.21"},
+      {:mob, "~> 0.9.22"},
       # 0.7.25+: bundles a style package's fonts (mob_bezalel's) in dev and
       # release builds (MOB-476, MOB-480).
       {:mob_dev, "~> 0.7.29", only: :dev, runtime: false},
