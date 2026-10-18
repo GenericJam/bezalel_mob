@@ -110,8 +110,9 @@ defmodule Bezalel.AppScreen do
         change_of: nil,
         code_open: false,
         speaking: nil,
-        speaking_ref: nil,
-        read_aloud: Settings.read_aloud?()
+        speech_pending: 0,
+        read_aloud: Settings.read_aloud?(),
+        voice: Settings.voice()
       )
       |> Mob.Socket.assign(Attach.assigns() ++ MaterialsView.assigns() ++ Stills.assigns())
       |> Helpers.open_conversation(conversation)
@@ -256,8 +257,14 @@ defmodule Bezalel.AppScreen do
 
   def handle_info({:attach, :tick}, socket), do: {:noreply, Attach.tick_recorder(socket)}
 
-  def handle_info({:speaking_done, ref}, %{assigns: %{speaking_ref: ref}} = socket),
-    do: {:noreply, Mob.Socket.assign(socket, speaking: nil, speaking_ref: nil)}
+  # The end of an utterance read aloud (Mob.Speech's, two elements;
+  # dictation's events have three).
+  def handle_info({:speech, ended}, socket) when ended in [:done, :cancelled, :failed],
+    do: {:noreply, Study.speech_ended(socket)}
+
+  # Settings → Voice stored a choice (`Bezalel.VoiceScreen`).
+  def handle_info({:voice_chosen, voice}, socket),
+    do: {:noreply, Mob.Socket.assign(socket, :voice, voice)}
 
   # The notice in Study ("Now answering with …") shows after any change of
   # model, whichever tab it was made from, until the conversation changes.

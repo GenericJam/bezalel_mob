@@ -21,7 +21,7 @@ defmodule Bezalel.Views.Study do
   """
   import Mob.Sigil
 
-  alias Bezalel.{Agent, Library, MaterialStore, Models, Native, Scripture}
+  alias Bezalel.{Agent, Library, MaterialStore, Models, Native, Scripture, Settings}
   alias Bezalel.Agent.{Card, Reply, Storyboard}
   alias Bezalel.Study.{DB, Lexicon}
   alias Bezalel.Views.{Attach, Helpers, Images, Sources}
@@ -496,26 +496,29 @@ defmodule Bezalel.Views.Study do
   def speakable(_message), do: ""
 
   @doc """
-  Reads `text` aloud (the platform's voice, `Bezalel.Native.speak/2`) as
-  message `id`'s: what was being read stops first. The voice doesn't say
-  when it's done, so `:speaking` clears after about as long as the reading
-  takes (`{:speaking_done, ref}`), or at the next tap.
+  Reads `text` aloud (the platform's voice, `Bezalel.Native.speak/3`, in
+  the voice chosen in Settings → Voice) as message `id`'s: what was being
+  read stops first. Each utterance ends with one `{:speech, :done |
+  :cancelled | :failed}` (`speech_ended/1`); `:speaking` clears when the
+  last one outstanding has ended, so a stopped reading's `:cancelled`
+  doesn't clear the one that replaced it.
   """
   def speak(socket, _id, ""), do: socket
 
   def speak(socket, id, text) do
-    ref = make_ref()
-    Process.send_after(self(), {:speaking_done, ref}, reading_ms(text))
-
     socket
     |> Native.stop_speaking()
-    |> Native.speak(text)
-    |> Socket.assign(speaking: id, speaking_ref: ref)
+    |> Native.speak(text, Settings.voice_opts())
+    |> Socket.assign(speaking: id, speech_pending: socket.assigns.speech_pending + 1)
   end
 
-  # About 14 characters a second, as the platform voices read at their
-  # default rate.
-  defp reading_ms(text), do: div(String.length(text) * 1000, 14) + 1500
+  @doc "An utterance ended (`{:speech, :done | :cancelled | :failed}`)."
+  def speech_ended(socket) do
+    case max(socket.assigns.speech_pending - 1, 0) do
+      0 -> Socket.assign(socket, speaking: nil, speech_pending: 0)
+      n -> Socket.assign(socket, :speech_pending, n)
+    end
+  end
 
   # A finished live reply (found as `store/4` finds it), read aloud if the
   # user asked.
@@ -598,9 +601,7 @@ defmodule Bezalel.Views.Study do
     end
   end
 
-  # Read aloud (`Bezalel.Speech.speakable/1`); a second tap stops it. The
-  # platform voice says nothing when it's done, so the stop shows for about
-  # as long as the reading takes.
+  # Read aloud (`Bezalel.Speech.speakable/1`); a second tap stops it.
   def handle({:speak, id}, %{assigns: %{speaking: id}} = socket) do
     {:noreply, socket |> Native.stop_speaking() |> Socket.assign(:speaking, nil)}
   end

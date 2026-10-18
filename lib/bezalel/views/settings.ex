@@ -115,12 +115,18 @@ defmodule Bezalel.Views.Settings do
     """
   end
 
-  # Read aloud and dictation.
+  # Read aloud (and the voice it reads in, on a screen of its own) and dictation.
   defp voice(assigns) do
     read_opts = [
       {"On", {self(), {:settings, {:read_aloud, true}}}},
       {"Off", {self(), {:settings, {:read_aloud, false}}}}
     ]
+
+    voice_note =
+      case assigns.voice do
+        nil -> "Your phone's default voice"
+        v -> Bezalel.VoiceScreen.label(v)
+      end
 
     [
       UI.card(
@@ -128,7 +134,7 @@ defmodule Bezalel.Views.Settings do
           field("Read replies aloud"),
           UI.segmented(read_opts, if(assigns.read_aloud, do: 0, else: 1)),
           note(
-            "Each finished reply's summary is read in your phone's voice. The speaker beside any reply reads it whenever you like."
+            "Each finished reply's summary is read aloud. The speaker beside any reply reads it whenever you like."
           ),
           field("Dictation"),
           note(
@@ -137,7 +143,8 @@ defmodule Bezalel.Views.Settings do
         ],
         padding: 16,
         gap: 10
-      )
+      ),
+      nav_row("Voice", voice_note, {self(), {:settings, :voice}})
     ]
   end
 
@@ -630,6 +637,10 @@ defmodule Bezalel.Views.Settings do
 
   def handle(:sources, socket),
     do: {:noreply, Socket.push_screen(socket, Bezalel.StudySourcesScreen, %{app: self()})}
+
+  # The voice screen tells this one (`{:voice_chosen, voice}`) when it stores a choice.
+  def handle(:voice, socket),
+    do: {:noreply, Socket.push_screen(socket, Bezalel.VoiceScreen, %{app: self()})}
 
   @doc """
   The study preferences changed (here, or on the approach or sources

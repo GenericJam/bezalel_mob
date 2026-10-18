@@ -27,7 +27,8 @@ defmodule Bezalel.MaterialsScreenTest do
           :bezalel_mode,
           :bezalel_model,
           :bezalel_study_preferences,
-          :bezalel_read_aloud
+          :bezalel_read_aloud,
+          :bezalel_voice
         ],
         do: Mob.State.delete(key)
 
@@ -619,7 +620,7 @@ defmodule Bezalel.MaterialsScreenTest do
       reply = Enum.find(assigns(view).messages, &(&1.role == :agent and &1.blocks != []))
 
       view = tap(view, {:study, {:speak, reply.id}})
-      assert [{:stop_speaking, nil}, {:speak, said}] = Native.calls()
+      assert [{:stop_speaking, nil}, {:speak, {said, []}}] = Native.calls()
       assert said == Study.speakable(reply)
       assert said != "" and not (said =~ "**")
       assert assigns(view).speaking == reply.id
@@ -628,6 +629,30 @@ defmodule Bezalel.MaterialsScreenTest do
       view = tap(view, {:study, {:speak, reply.id}})
       assert Native.names() == [:stop_speaking]
       assert assigns(view).speaking == nil
+    end
+
+    test "the stop shows until the reading ends; a stopped reading's end doesn't clear the next" do
+      view = AppScreen |> mount_screen()
+      reply = Enum.find(assigns(view).messages, &(&1.role == :agent and &1.blocks != []))
+      speak = {:study, {:speak, reply.id}}
+
+      # Read, stopped, read again before the stopped one's :cancelled arrives.
+      view = view |> tap(speak) |> tap(speak) |> tap(speak)
+      assert assigns(view).speaking == reply.id
+
+      view = render_info(view, {:speech, :cancelled})
+      assert assigns(view).speaking == reply.id
+      view = render_info(view, {:speech, :done})
+      assert assigns(view).speaking == nil
+    end
+
+    test "the voice chosen in Settings reads" do
+      Settings.put_voice(%{id: "en-gb-x-gbb-local", name: "English (UK) gbb", language: "en-GB"})
+      view = AppScreen |> mount_screen()
+      reply = Enum.find(assigns(view).messages, &(&1.role == :agent and &1.blocks != []))
+
+      tap(view, {:study, {:speak, reply.id}})
+      assert [_stop, {:speak, {_said, [voice: "en-gb-x-gbb-local"]}}] = Native.calls()
     end
 
     test "with Read replies aloud on, a finished reply is read" do
@@ -641,7 +666,7 @@ defmodule Bezalel.MaterialsScreenTest do
         |> render_async()
 
       reply = List.last(assigns(view).messages)
-      assert {:speak, Study.speakable(reply)} in Native.calls()
+      assert {:speak, {Study.speakable(reply), []}} in Native.calls()
     end
   end
 

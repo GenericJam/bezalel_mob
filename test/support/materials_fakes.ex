@@ -4,7 +4,8 @@ defmodule Bezalel.Test.Native do
   is recorded, in order, for `calls/0`; nothing reaches a picker, the
   camera, the microphone or a voice. `thumbnail/2` answers what
   `put_thumbnail/1` set (a file it copies to a fresh path, as mob_photos
-  writes one), else `{:error, :unavailable}`.
+  writes one), else `{:error, :unavailable}`; `voices/0` what
+  `put_voices/1` set, else `{:error, :unsupported}` (as off device).
   """
   @behaviour Bezalel.Native
 
@@ -13,7 +14,7 @@ defmodule Bezalel.Test.Native do
   @doc "Creates the table (owned by the caller, which must outlive the tests)."
   def start, do: :ets.new(@table, [:named_table, :public, :ordered_set])
 
-  @doc "Forgets the recorded calls and the thumbnail."
+  @doc "Forgets the recorded calls, the thumbnail and the voices."
   def reset, do: :ets.delete_all_objects(@table)
 
   @doc "The calls made since the last `reset/0`, oldest first: `{name, args}`."
@@ -24,6 +25,9 @@ defmodule Bezalel.Test.Native do
 
   @doc "Makes `thumbnail/2` answer with a copy of the file at `path`."
   def put_thumbnail(path), do: :ets.insert(@table, {:thumbnail, path})
+
+  @doc "Makes `voices/0` answer `result` (`{:ok, voices}` or `{:error, reason}`)."
+  def put_voices(result), do: :ets.insert(@table, {:voices, result})
 
   defp record(name, args) do
     :ets.insert(@table, {{:call, System.unique_integer([:monotonic])}, {name, args}})
@@ -50,9 +54,17 @@ defmodule Bezalel.Test.Native do
   @impl true
   def stop_playback(socket), do: tap(socket, fn _ -> record(:stop_playback, nil) end)
   @impl true
-  def speak(socket, text), do: tap(socket, fn _ -> record(:speak, text) end)
+  def speak(socket, text, opts), do: tap(socket, fn _ -> record(:speak, {text, opts}) end)
   @impl true
   def stop_speaking(socket), do: tap(socket, fn _ -> record(:stop_speaking, nil) end)
+
+  @impl true
+  def voices do
+    case :ets.lookup(@table, :voices) do
+      [{:voices, result}] -> result
+      [] -> {:error, :unsupported}
+    end
+  end
 
   @impl true
   def thumbnail(path, opts) do
