@@ -137,7 +137,8 @@ defmodule Bezalel.StudyLibraryTest do
              "from STEP Bible (www.STEPBible.org), created by Tyndale House, Cambridge. CC BY 4.0. Modified."
 
     assert text =~ "This text of God's Word has been dedicated to the public domain."
-    assert text =~ "Dead Sea Scrolls transcription by Martin G. Abegg Jr."
+    assert text =~ "transcription by Martin G. Abegg Jr., James E. Bowley and Edward M. Cook"
+    assert text =~ "Leon Levy Dead Sea Scrolls Digital Library"
     assert text =~ "Summaries of John Owen's works"
     assert text =~ "Permission is hereby granted, free of charge"
 
@@ -208,5 +209,25 @@ defmodule Bezalel.StudyLibraryTest do
     assert assigns(view).toast.text == "Removed the NET Bible pack."
     assert pack_button?(view, {:download, "translations"})
     assert text(view) =~ "needs the NET Bible pack"
+  end
+
+  test "a library with the scrolls pack lists it as the Dead Sea Scrolls, optional, after the ancient sources; a pack this app doesn't know is left out",
+       ctx do
+    PackServer.publish(ctx.server, ctx.base, 2, [
+      {"scrolls", PackServer.pack("scrolls", "v2"), false},
+      {"future", PackServer.pack("future", "v2"), false},
+      {"ancient", PackServer.pack("ancient", "v2"), false},
+      {"core", ctx.core, true}
+    ])
+
+    :ok = Packs.check()
+    assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 2."}}, 5_000
+    flush()
+
+    view = settings()
+    assert Enum.map(assigns(view).packs.packs, & &1.name) == ["core", "ancient", "scrolls"]
+    assert %{required: false} = Enum.find(assigns(view).packs.packs, &(&1.name == "scrolls"))
+    assert text(view) =~ "Dead Sea Scrolls"
+    assert pack_button?(view, {:download, "scrolls"})
   end
 end
