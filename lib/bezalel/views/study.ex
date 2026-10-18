@@ -559,15 +559,19 @@ defmodule Bezalel.Views.Study do
   defp composer_busy?(a),
     do: a.preparing != nil or a.keeping > 0 or a.recorder != nil or a.dictation != nil
 
+  defp still_sending(socket, what, opts \\ []),
+    do: Helpers.toast(socket, "A question is still on its way. #{what} once it's gone.", opts)
+
   # ── Events ────────────────────────────────────────────────────────────────
 
   @doc """
   Handles a Study event. Sending while a live reply streams steers it;
   while a scripted reply is on its way it waits (the draft stays), so
-  replies come back in the order they were asked. A question with
-  materials goes once they're ready for the model
-  (`Bezalel.Views.Attach.prepare/4`, then `send_prepared/5`); meanwhile,
-  and while something is still being added, sending waits.
+  replies come back in the order they were asked. The question leaves the
+  composer as it's sent; one with materials goes once they're ready for
+  the model (`Bezalel.Views.Attach.prepare/4`, then `send_prepared/5`),
+  and comes back to the composer if it can't go. Meanwhile, and while
+  something is still being added, sending waits.
   """
   def handle(:send, socket) do
     text = String.trim(socket.assigns.draft)
@@ -582,13 +586,13 @@ defmodule Bezalel.Views.Study do
         {:noreply, socket}
 
       Reply.running?(a.streams[cid]) ->
-        {:noreply, Attach.prepare(socket, :steer, text)}
+        {:noreply, socket |> Socket.assign(draft: "", menu: nil) |> Attach.prepare(:steer, text)}
 
       Helpers.replying?(a) ->
         {:noreply, socket}
 
       true ->
-        {:noreply, Attach.prepare(socket, :ask, text)}
+        {:noreply, socket |> Socket.assign(draft: "", menu: nil) |> Attach.prepare(:ask, text)}
     end
   end
 
@@ -611,13 +615,15 @@ defmodule Bezalel.Views.Study do
     {:noreply, socket}
   end
 
+  # Not while a question is being made ready: it goes first (and its
+  # reply would take this one's place).
   def handle(:retry, socket) do
     cid = socket.assigns.conversation.id
 
-    if Reply.running?(socket.assigns.streams[cid]) do
-      {:noreply, socket}
-    else
-      {:noreply, socket |> release(cid) |> drop_stream(cid) |> respond()}
+    cond do
+      Reply.running?(socket.assigns.streams[cid]) -> {:noreply, socket}
+      socket.assigns.preparing != nil -> {:noreply, still_sending(socket, "Try again")}
+      true -> {:noreply, respond(socket)}
     end
   end
 
@@ -688,9 +694,16 @@ defmodule Bezalel.Views.Study do
   end
 
   def handle(:ask_again, socket) do
-    if Helpers.replying?(socket.assigns),
-      do: {:noreply, Socket.assign(socket, :toast, nil)},
-      else: {:noreply, socket |> Socket.assign(:toast, nil) |> respond()}
+    cond do
+      socket.assigns.preparing != nil ->
+        {:noreply, still_sending(socket, "Ask again", ask_again: true)}
+
+      Helpers.replying?(socket.assigns) ->
+        {:noreply, Socket.assign(socket, :toast, nil)}
+
+      true ->
+        {:noreply, socket |> Socket.assign(:toast, nil) |> respond()}
+    end
   end
 
   def handle({:word, key}, socket),
@@ -758,24 +771,30 @@ defmodule Bezalel.Views.Study do
   Sends a question whose materials are ready (`Bezalel.Views.Attach`):
   `mode` `:ask` (a new question), `:steer` (into the reply streaming) or
   `:again` (the last question asked anew, its materials sent again for the
-  model chosen now). `cid` is the conversation it was asked in: if the
-  user has moved on meanwhile, it isn't sent, and they're told.
+  model chosen now). Ask or steer is decided again now: a reply may have
+  started or ended while the materials were made ready. `cid` is the
+  conversation it was asked in: if the user has moved on meanwhile, it
+  isn't sent, and they're told (a question asked again keeps its Try
+  again there).
   """
   def send_prepared(socket, mode, text, attachments, cid \\ nil) do
     %{id: open} = conversation = socket.assigns.conversation
 
     cond do
+      cid != nil and cid != open and mode == :again ->
+        Helpers.toast(socket, "It wasn't asked again: you'd moved on. Try again from there.")
+
       cid != nil and cid != open ->
         Helpers.toast(
           socket,
           "That question wasn't sent: you'd moved on. Its materials are kept."
         )
 
-      mode == :steer and Reply.running?(socket.assigns.streams[open]) ->
-        steer(socket, open, text, attachments)
-
       mode == :again ->
         again(socket, attachments)
+
+      Reply.running?(socket.assigns.streams[open]) ->
+        steer(socket, open, text, attachments)
 
       true ->
         ask(socket, text, attachments, conversation)
@@ -783,9 +802,10 @@ defmodule Bezalel.Views.Study do
   end
 
   # Live, the loop writes the question into the session; scripted, it's
-  # written here and the storyboard answers it.
+  # written here and the storyboard answers it. (The composer was cleared
+  # when Send was tapped.)
   defp ask(socket, text, attachments, %{id: cid} = conversation) do
-    socket = socket |> Socket.assign(draft: "", menu: nil) |> drop_stream(cid)
+    socket = drop_stream(socket, cid)
 
     if Agent.live?(socket.assigns.account) do
       socket |> respond_live(text, attachments) |> Helpers.reload_messages()
@@ -805,10 +825,7 @@ defmodule Bezalel.Views.Study do
       :ok ->
         reply = socket.assigns.streams[cid]
         link(attachments, reply.session_id)
-
-        socket
-        |> Socket.assign(draft: "", menu: nil)
-        |> put_stream(cid, %{reply | pending: reply.pending ++ [text]})
+        put_stream(socket, cid, %{reply | pending: reply.pending ++ [text]})
 
       # The loop is gone (released meanwhile): ask afresh.
       {:error, :idle} ->
@@ -831,8 +848,9 @@ defmodule Bezalel.Views.Study do
   again, Ask again), bound to that conversation and the model chosen now:
   its result lands there even if the user has moved on. Live
   (`Bezalel.Agent.live?/1`), the question is taken back off the session
-  and asked anew (its materials made ready for the model first,
-  `Bezalel.Views.Attach.prepare/4`), and the reply streams as loop events
+  and asked anew (its materials still kept made ready for the model first,
+  `Bezalel.Views.Attach.prepare/4`; until they are, the failed reply and
+  its Try again stay), and the reply streams as loop events
   (`agent_event/3`); without a model the storyboard's comes back through
   `handle_async({:reply, ...})` (`replied/3`). Each conversation has at
   most one reply in flight, and replies in different conversations run
@@ -842,18 +860,38 @@ defmodule Bezalel.Views.Study do
     cid = socket.assigns.conversation.id
 
     if Agent.live?(socket.assigns.account) do
-      case Library.question_materials(cid) do
-        [] -> again(socket, [])
-        ids -> Attach.prepare(socket, :again, "", ids)
+      case Library.question(cid) do
+        nil -> again(socket, [])
+        question -> respond_again(socket, question)
       end
     else
-      respond_scripted(socket)
+      socket |> drop_stream(cid) |> respond_scripted()
+    end
+  end
+
+  # A material deleted since goes without it; a question that was only
+  # materials, all deleted, has nothing left to ask (its Try again stays).
+  defp respond_again(socket, %{text: text, materials: ids}) do
+    materials = for id <- ids, {:ok, m} <- [MaterialStore.fetch(id, %{})], do: m
+
+    cond do
+      materials != [] ->
+        Attach.prepare(socket, :again, "", materials)
+
+      ids != [] and String.trim(text) == "" ->
+        Helpers.toast(
+          socket,
+          "Its materials were deleted from Materials: there's nothing to ask again."
+        )
+
+      true ->
+        again(socket, [])
     end
   end
 
   defp again(socket, attachments) do
     cid = socket.assigns.conversation.id
-    socket = release(socket, cid)
+    socket = socket |> release(cid) |> drop_stream(cid)
 
     case Library.take_question(cid) do
       {:ok, text} -> socket |> respond_live(text, attachments) |> Helpers.reload_messages()
@@ -897,10 +935,9 @@ defmodule Bezalel.Views.Study do
   defp keep_question(socket, cid, text, attachments) do
     socket = release(socket, cid)
 
-    with %Library.Conversation{} = conversation <- Library.get_conversation(cid) do
-      {:ok, _} =
-        Library.add_message(conversation, %{role: :user, text: text, attachments: attachments})
-
+    with %Library.Conversation{} = conversation <- Library.get_conversation(cid),
+         {:ok, _} <-
+           Library.add_message(conversation, %{role: :user, text: text, attachments: attachments}) do
       link(attachments, Library.get_conversation(cid))
     end
 

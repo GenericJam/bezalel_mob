@@ -74,6 +74,13 @@
         </intent>
     </queries>
 
+    <!-- mob:plugin-permissions BEGIN (managed — regenerated each build; do not edit) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- mob:plugin-permissions END -->
     <application
         android:label="Bezalel"
         android:icon="@mipmap/ic_launcher"

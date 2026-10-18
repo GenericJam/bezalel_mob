@@ -295,6 +295,12 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   uses to open at and follow the newest message), from mob_new 0.6.10. Keep
   them if you regenerate the native project. The iOS side of MOB-481 is in
   mob 0.9.18.
+- `mix mob.deploy --native` regenerates what the plugins add to the native
+  project: `priv/generated/`, `MobPluginBootstrap.kt`, the plugins' bridges
+  under `android/app/src/main/java/io/mob/<plugin>/` and the manifest's
+  `mob:plugin-permissions` block. They're committed (as for mob_markdown and
+  mob_secure_store), in the same commit as the plugin change that made them,
+  so the checked-in native project matches `mix.lock`.
 
 ## The plan
 

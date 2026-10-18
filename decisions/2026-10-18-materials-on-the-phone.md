@@ -38,6 +38,18 @@ decodes compressed audio and video on the phone.
   (its words show under its chip); anything still missing is transcribed
   when the question is sent, and if that fails the question isn't sent and
   the user is told why.
+- **Sending with materials** (`Bezalel.Views.Attach.prepare/4`): the
+  question (words and chips) leaves the composer when Send is tapped, and
+  its materials are made ready off the screen; ask or steer is decided
+  again when they are. If they can't be, the words and chips come back
+  before anything added meanwhile. Sending, Try again and Ask again wait
+  while one is made ready; a transcript already being made is waited for,
+  not made a second time. Try again with materials keeps the failed reply
+  and its Try again until its materials are ready, and drops materials
+  deleted since. A question (or something being added) goes only to the
+  conversation it was started in: if the user has moved on, it isn't sent
+  (or isn't added as a chip there), and they're told; materials stay in
+  Materials either way.
 - **Video**: the notice (`Materials.video_notice/0`) before the camera
   opens and before a picked video is kept; the video is kept and goes as the
   transcript of its audio track. The stills picker (bezalel-at6.10's rest)

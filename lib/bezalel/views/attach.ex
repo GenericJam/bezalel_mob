@@ -216,12 +216,10 @@ defmodule Bezalel.Views.Attach do
   def handle({:video_ok, items}, socket), do: {:noreply, socket |> close_sheet() |> keep(items)}
   def handle({:video_no, _source}, socket), do: {:noreply, close_sheet(socket)}
 
+  # Its transcript stays known: one being made is still being made.
   def handle({:remove, id}, socket) do
     {:noreply,
-     Socket.assign(socket,
-       attachments: Enum.reject(socket.assigns.attachments, &(&1.id == id)),
-       transcripts: Map.delete(socket.assigns.transcripts, id)
-     )}
+     Socket.assign(socket, :attachments, Enum.reject(socket.assigns.attachments, &(&1.id == id)))}
   end
 
   def handle(:stop_recording, %{assigns: %{recorder: %{}}} = socket),
@@ -494,15 +492,19 @@ defmodule Bezalel.Views.Attach do
     "#{what} #{at}#{Path.extname(path)}"
   end
 
-  # Kept off the screen's process: a file is read whole and hashed.
+  # Kept off the screen's process: a file is read whole and hashed. The
+  # chips are for the conversation open now (`kept/3`).
   defp keep(socket, []), do: socket
 
   defp keep(socket, items) do
     ctx = ctx(socket)
+    cid = socket.assigns.conversation.id
 
     socket
     |> Socket.assign(:keeping, socket.assigns.keeping + 1)
-    |> Socket.start_async({:keep, make_ref()}, fn -> Enum.map(items, &keep_item(&1, ctx)) end)
+    |> Socket.start_async({:keep, cid, make_ref()}, fn ->
+      Enum.map(items, &keep_item(&1, ctx))
+    end)
   end
 
   defp keep_item(item, ctx) do
@@ -521,26 +523,45 @@ defmodule Bezalel.Views.Attach do
     end
   end
 
-  @doc "Materials kept from the pickers (`handle_async({:keep, _}, …)`)."
-  def kept(result, socket) do
+  @doc """
+  Materials kept from the pickers for conversation `cid`
+  (`handle_async({:keep, cid, _}, …)`): chips there if it's still open;
+  if the user has moved on, they're only in Materials, and told so.
+  """
+  def kept(cid, result, socket) do
     socket = Socket.assign(socket, :keeping, max(socket.assigns.keeping - 1, 0))
 
     case result do
       {:ok, results} ->
         materials = for {:ok, m} <- results, do: m
         failed = for {:error, name, reason} <- results, do: {name, reason}
-        known = MapSet.new(socket.assigns.attachments, & &1.id)
-        added = Enum.reject(materials, &MapSet.member?(known, &1.id))
 
         socket
-        |> Socket.assign(:attachments, socket.assigns.attachments ++ added)
-        |> Images.load(Images.material_images(added))
-        |> transcribe_recordings(added)
+        |> add_chips(cid, materials)
         |> keep_failed(failed)
 
       {:exit, reason} ->
         Helpers.toast(socket, "That couldn't be added (#{inspect(reason)}).")
     end
+  end
+
+  defp add_chips(socket, _cid, []), do: socket
+
+  defp add_chips(%{assigns: %{conversation: %{id: cid}}} = socket, cid, materials) do
+    known = MapSet.new(socket.assigns.attachments, & &1.id)
+    added = Enum.reject(materials, &MapSet.member?(known, &1.id))
+
+    socket
+    |> Socket.assign(:attachments, socket.assigns.attachments ++ added)
+    |> Images.load(Images.material_images(added))
+    |> transcribe_recordings(added)
+  end
+
+  defp add_chips(socket, _cid, _materials) do
+    Helpers.toast(
+      socket,
+      "It's kept in Materials. It wasn't added here: you'd moved to another conversation."
+    )
   end
 
   defp keep_failed(socket, []), do: socket
@@ -559,7 +580,14 @@ defmodule Bezalel.Views.Attach do
     end)
   end
 
-  @doc "Transcribes `m` in the background, its words then shown (`transcribed/3`)."
+  @doc """
+  Transcribes `m` in the background, its words then shown (`transcribed/3`);
+  once at a time.
+  """
+  def transcribe(%{assigns: %{transcripts: t}} = socket, %Material{id: id})
+      when is_map_key(t, id) and :erlang.map_get(id, t) == :working,
+      do: socket
+
   def transcribe(socket, %Material{} = m) do
     ctx = ctx(socket)
 
@@ -577,7 +605,10 @@ defmodule Bezalel.Views.Attach do
     |> Socket.start_async({:transcribe, m.id}, fn -> Transcribe.transcribe(m, ctx) end)
   end
 
-  @doc "A transcript is made (`handle_async({:transcribe, id}, …)`)."
+  @doc """
+  A transcript is made (`handle_async({:transcribe, id}, …)`); a question
+  waiting for it goes on.
+  """
   def transcribed(id, result, socket) do
     value =
       case result do
@@ -586,7 +617,9 @@ defmodule Bezalel.Views.Attach do
         {:exit, reason} -> {:error, transcribe_error(reason)}
       end
 
-    Socket.assign(socket, :transcripts, Map.put(socket.assigns.transcripts, id, value))
+    socket
+    |> Socket.assign(:transcripts, Map.put(socket.assigns.transcripts, id, value))
+    |> start_prepare()
   end
 
   defp transcript_text(t) do
@@ -612,32 +645,57 @@ defmodule Bezalel.Views.Attach do
   # ── Sending ──────────────────────────────────────────────────────────────
 
   @doc """
-  Sends `text` with the chips' materials (or `ids`, a question asked again)
-  as `mode` (`:ask`, `:steer`, `:again`): at once without materials, else
-  once they're attachments for the model chosen now, transcribing what
-  must be first (`prepared/4`).
+  Sends `text` as `mode` (`:ask`, `:steer`, `:again`) with the chips'
+  materials, or with `materials` (a question asked again takes its own):
+  at once without materials, else once they're attachments for the model
+  chosen now (`prepared/2`), transcribing what must be first. The chips
+  leave the composer as the question does (the screen clears the draft);
+  if it can't go, both come back. A transcript already being made is
+  waited for, not made twice (`transcribed/3`).
   """
-  def prepare(socket, mode, text, ids \\ nil) do
-    ids = ids || Enum.map(socket.assigns.attachments, & &1.id)
-    cid = socket.assigns.conversation.id
+  def prepare(socket, mode, text, materials \\ nil)
 
-    if ids == [] do
-      Study.send_prepared(socket, mode, text, [])
+  def prepare(socket, mode, text, nil) do
+    chips = socket.assigns.attachments
+    socket |> Socket.assign(:attachments, []) |> prepare(mode, text, chips)
+  end
+
+  def prepare(socket, mode, text, []), do: Study.send_prepared(socket, mode, text, [])
+
+  def prepare(socket, mode, text, materials) do
+    preparing = %{
+      cid: socket.assigns.conversation.id,
+      mode: mode,
+      text: text,
+      materials: materials,
+      model: Helpers.model(socket).id,
+      ctx: ctx(socket),
+      started: false,
+      label: preparing_label(materials)
+    }
+
+    socket |> Socket.assign(:preparing, preparing) |> start_prepare()
+  end
+
+  # Starts making the attachments once no transcript they need is still
+  # being made.
+  defp start_prepare(%{assigns: %{preparing: %{started: false} = p}} = socket) do
+    if Enum.any?(p.materials, &(socket.assigns.transcripts[&1.id] == :working)) do
+      socket
     else
-      model = Helpers.model(socket).id
-      ctx = ctx(socket)
+      ids = Enum.map(p.materials, & &1.id)
+      inputs = Rho.Models.inputs(p.model)
 
       socket
-      |> Socket.assign(:preparing, %{cid: cid, label: preparing_label(socket, ids)})
-      |> Socket.start_async({:prepare, cid, mode, text}, fn ->
-        attachments(ids, Rho.Models.inputs(model), ctx)
-      end)
+      |> Socket.assign(:preparing, %{p | started: true})
+      |> Socket.start_async({:prepare, p.cid}, fn -> attachments(ids, inputs, p.ctx) end)
     end
   end
 
-  defp preparing_label(socket, ids) do
-    sound? =
-      Enum.any?(socket.assigns.attachments, &(&1.id in ids and &1.kind in [:audio, :video]))
+  defp start_prepare(socket), do: socket
+
+  defp preparing_label(materials) do
+    sound? = Enum.any?(materials, &(&1.kind in [:audio, :video]))
 
     cond do
       sound? and not Transcribe.model_ready?() ->
@@ -671,41 +729,90 @@ defmodule Bezalel.Views.Attach do
   defp failed({:ok, _}, _m), do: nil
   defp failed({:error, reason}, m), do: {:error, {:transcribe, m, reason}}
 
-  @doc "The question's attachments are ready (`handle_async({:prepare, …}, …)`)."
-  def prepared({cid, mode, text}, result, socket) do
+  @doc "The question's attachments are ready (`handle_async({:prepare, _}, …)`)."
+  def prepared(result, %{assigns: %{preparing: %{} = p}} = socket) do
     socket = Socket.assign(socket, :preparing, nil)
 
     case result do
       {:ok, {:ok, atts}} ->
-        socket |> clear_for(cid, mode) |> Study.send_prepared(mode, text, atts, cid)
+        socket
+        |> forget_transcripts(p.materials)
+        |> Study.send_prepared(p.mode, p.text, atts, p.cid)
 
       {:ok, {:error, reason}} ->
-        Helpers.toast(socket, send_error(reason, socket))
+        not_sent(socket, p, reason)
 
       {:exit, reason} ->
-        Helpers.toast(socket, send_error(reason, socket))
+        not_sent(socket, p, reason)
     end
   end
 
-  # The chips went with the question if it was asked from them (a question
-  # asked again takes its own materials) in the conversation still open.
-  defp clear_for(socket, cid, mode) when mode in [:ask, :steer] do
-    if socket.assigns.conversation.id == cid,
-      do: Socket.assign(socket, attachments: [], transcripts: %{}),
-      else: socket
+  def prepared(_result, socket), do: socket
+
+  # The transcripts shown under chips that went (one being made stays known).
+  defp forget_transcripts(socket, materials) do
+    transcripts =
+      Enum.reduce(materials, socket.assigns.transcripts, fn m, acc ->
+        if acc[m.id] == :working, do: acc, else: Map.delete(acc, m.id)
+      end)
+
+    Socket.assign(socket, :transcripts, transcripts)
   end
 
-  defp clear_for(socket, _cid, _mode), do: socket
+  # The question didn't go: in the conversation still open, its words and
+  # chips come back (before what was added meanwhile; a deleted material's
+  # chip doesn't); a question asked again keeps its Try again.
+  defp not_sent(%{assigns: %{conversation: %{id: cid}}} = socket, %{cid: cid} = p, reason) do
+    message = send_error(reason, p.mode, socket)
 
-  defp send_error({:transcribe, m, reason}, socket) do
+    case p.mode do
+      :again ->
+        Helpers.toast(socket, message, ask_again: socket.assigns.streams[cid] == nil)
+
+      _ask_or_steer ->
+        gone = with {:not_found, id} <- reason, do: id
+        chips = Enum.reject(p.materials, &(&1.id == gone))
+        known = MapSet.new(chips, & &1.id)
+        added = Enum.reject(socket.assigns.attachments, &MapSet.member?(known, &1.id))
+
+        # A dictation started meanwhile writes over the box from its base:
+        # the question goes back before both.
+        dictation =
+          with %{base: base} = d <- socket.assigns.dictation,
+               do: %{d | base: before(p.text, base)}
+
+        socket
+        |> Socket.assign(
+          attachments: chips ++ added,
+          draft: before(p.text, socket.assigns.draft),
+          dictation: dictation
+        )
+        |> Helpers.toast(message)
+    end
+  end
+
+  defp not_sent(socket, p, reason), do: Helpers.toast(socket, send_error(reason, p.mode, socket))
+
+  defp before(text, typed) do
+    case String.trim(typed) do
+      "" -> text
+      typed -> String.trim(text <> "\n\n" <> typed)
+    end
+  end
+
+  defp send_error({:transcribe, m, reason}, _mode, socket) do
     model = Models.get(socket.assigns.model_id).name
     "#{m.name}: #{transcribe_error(reason)} (#{model} reads its transcript.)"
   end
 
-  defp send_error({:not_found, _id}, _socket),
-    do: "One of the materials was deleted before it was sent. Remove its chip and send again."
+  defp send_error({:not_found, _id}, :again, _socket),
+    do: "One of its materials was deleted meanwhile. Try again to ask without it."
 
-  defp send_error(reason, _socket), do: "The materials couldn't be sent (#{inspect(reason)})."
+  defp send_error({:not_found, _id}, _mode, _socket),
+    do: "One of the materials was deleted before it was sent; it's off the question. Send again."
+
+  defp send_error(reason, _mode, _socket),
+    do: "The materials couldn't be sent (#{inspect(reason)})."
 
   defp ctx(socket), do: %{session_id: socket.assigns.conversation.session_id}
 end

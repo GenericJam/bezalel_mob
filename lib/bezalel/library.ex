@@ -387,7 +387,7 @@ defmodule Bezalel.Library do
   @doc """
   Takes the last question back off the session, to ask it again (Try
   again, Ask again): `{:ok, text}`, or `:none` when the conversation
-  doesn't end in one; its materials (`question_materials/1`) are the
+  doesn't end in one; its materials (`question/1`) are the
   caller's to send again. The conversation must have no loop.
   """
   @spec take_question(integer()) :: {:ok, String.t()} | :none
@@ -405,19 +405,19 @@ defmodule Bezalel.Library do
   end
 
   @doc """
-  The ids of the materials the conversation's last question sent (`[]`
-  when it sent none, or there is none): what asking it again sends again.
-  Reads only.
+  The conversation's last question: its typed text and the ids of the
+  materials it sent (what asking it again sends again), or `nil` when there
+  is none. Reads only.
   """
-  @spec question_materials(integer()) :: [String.t()]
-  def question_materials(conversation_id) do
+  @spec question(integer()) :: %{text: String.t(), materials: [String.t()]} | nil
+  def question(conversation_id) do
     with %Conversation{session_file: file} = c when is_binary(file) <-
            get_conversation(conversation_id),
          {_session, branch} = open(c, Models.default()),
-         %{} = entry <- last_question(branch) do
-      [entry] |> Transcript.materials() |> Enum.map(& &1.id)
+         %{"message" => m} = entry <- last_question(branch) do
+      %{text: Session.typed(m), materials: [entry] |> Transcript.materials() |> Enum.map(& &1.id)}
     else
-      _ -> []
+      _ -> nil
     end
   end
 

@@ -7,10 +7,41 @@
   default_font: nil,
   default_style: :mob_bezalel,
   lifecycle: [],
-  nifs: [:mob_secure_store_nif],
+  nifs: [
+    :mob_secure_store_nif,
+    :mob_photos_nif,
+    :mob_camera_nif,
+    :mob_speech_nif,
+    :mob_whisper_nif,
+    :mob_media_nif
+  ],
   notification_handlers: [],
-  plugins: [:mob_secure_store, :mob_markdown],
-  screens: [],
+  plugins: [
+    :mob_secure_store,
+    :mob_markdown,
+    :mob_photos,
+    :mob_camera,
+    :mob_speech,
+    :mob_whisper,
+    :mob_media
+  ],
+  screens: [
+    %{
+      default_route: "/mob_camera/demo",
+      module: MobCamera.DemoScreen,
+      plugin: :mob_camera
+    },
+    %{
+      default_route: "/mob_speech/demo",
+      module: MobSpeech.DemoScreen,
+      plugin: :mob_speech
+    },
+    %{
+      default_route: "/mob_media/demo",
+      module: MobMedia.DemoScreen,
+      plugin: :mob_media
+    }
+  ],
   settings: [],
   styles: [%{name: :mob_bezalel, theme: MobBezalel.Dark}]
 }

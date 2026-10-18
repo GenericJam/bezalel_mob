@@ -17,6 +17,18 @@ object MobPluginBootstrap {
         io.mob.securestore.MobSecureStoreBridge.register()
         handOff(io.mob.securestore.MobSecureStoreBridge, activity)
         collectPermissionProvider(io.mob.securestore.MobSecureStoreBridge)
+        io.mob.photos.MobPhotosBridge.register()
+        handOff(io.mob.photos.MobPhotosBridge, activity)
+        collectPermissionProvider(io.mob.photos.MobPhotosBridge)
+        io.mob.camera.MobCameraBridge.register()
+        handOff(io.mob.camera.MobCameraBridge, activity)
+        collectPermissionProvider(io.mob.camera.MobCameraBridge)
+        io.mob.speech.MobSpeechBridge.register()
+        handOff(io.mob.speech.MobSpeechBridge, activity)
+        collectPermissionProvider(io.mob.speech.MobSpeechBridge)
+        io.mob.media.MobMediaBridge.register()
+        handOff(io.mob.media.MobMediaBridge, activity)
+        collectPermissionProvider(io.mob.media.MobMediaBridge)
     }
 
     // Returns the first plugin-supplied Android permission mapping for `cap`,

@@ -200,8 +200,8 @@ defmodule Bezalel.Views.Helpers do
       switched: false,
       draft: "",
       # The chips were for the conversation left; they stay in Materials.
-      attachments: [],
-      transcripts: %{}
+      # (What's known of transcripts stays: one being made still is.)
+      attachments: []
     )
     |> Socket.assign(:expanded, expanded)
     |> Socket.assign(:tab, :study)

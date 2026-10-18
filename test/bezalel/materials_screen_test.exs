@@ -15,6 +15,7 @@ defmodule Bezalel.MaterialsScreenTest do
   alias Bezalel.MaterialStore.{Link, Row}
   alias Bezalel.Test.{FakeLLM, MemoryStore, Native, Png, Whisper}
   alias Bezalel.Views.Study
+  alias Mob.Screen.Async
   alias MobMedia.PCM
   alias ReqLLM.Message.ContentPart
 
@@ -297,6 +298,224 @@ defmodule Bezalel.MaterialsScreenTest do
       assert assigns(view).draft == "Listen"
       refute Enum.any?(assigns(view).messages, &(&1.text == "Listen"))
     end
+
+    test "Try again with materials keeps its Try again if they can't be made ready, or the user moves on" do
+      :ok = Rho.Auth.put_api_key(:anthropic, "sk-ant-api03-test-key-0123456789")
+
+      {:ok, llm} =
+        FakeLLM.start([[{:error, {:http, 401, "invalid x-api-key"}}], [{:text, "A reading."}]])
+
+      Application.put_env(:bezalel, Live, llm: {FakeLLM, llm}, retry_base_ms: 1)
+      Whisper.put_text("Let there be light")
+
+      view = AppScreen |> mount_screen() |> record()
+      [audio] = assigns(view).attachments
+      cid = assigns(view).conversation.id
+
+      view =
+        view
+        |> render_info({:change, :draft, "Listen"})
+        |> tap({:study, :send})
+        |> render_async()
+        |> drain_loop()
+
+      assert_receive {:llm_request, _first}
+      assert %{status: :error} = assigns(view).streams[cid]
+
+      # The transcript is gone and can't be made again now.
+      for t <- MaterialStore.derivatives(audio.id, %{}), do: :ok = MaterialStore.delete(t.id)
+      Whisper.put_text({:error, :unavailable})
+      view = view |> tap({:study, :retry}) |> render_async()
+
+      assert assigns(view).toast.text =~ "can't go to a model that doesn't take audio"
+      assert %{status: :error} = assigns(view).streams[cid]
+      assert Enum.any?(assigns(view).messages, &(&1.text == "Listen"))
+
+      # Asked again, then the user moves on before it goes.
+      Whisper.put_text("Let there be light")
+      {:ok, other} = Library.create_conversation(%{name: "Other", kicker: "STUDY", kind: "Study"})
+
+      view =
+        view
+        |> tap({:study, :retry})
+        |> tap({:convs, {:open, other.id}})
+        |> render_async()
+
+      assert assigns(view).toast.text =~ "wasn't asked again"
+      refute_received {:llm_request, _}
+
+      view = tap(view, {:convs, {:open, cid}})
+      assert %{status: :error} = assigns(view).streams[cid]
+
+      _view = view |> tap({:study, :retry}) |> render_async() |> drain_loop()
+      assert_receive {:llm_request, again}
+      question = List.last(again.messages)
+      assert Enum.any?(question.content, &(&1.type == :text and &1.text =~ "Let there be light"))
+    end
+
+    test "Try again waits while a new question's materials are made ready" do
+      :ok = Rho.Auth.put_api_key(:anthropic, "sk-ant-api03-test-key-0123456789")
+
+      {:ok, llm} =
+        FakeLLM.start([[{:error, {:http, 401, "invalid x-api-key"}}], [{:text, "A blue one."}]])
+
+      Application.put_env(:bezalel, Live, llm: {FakeLLM, llm}, retry_base_ms: 1)
+
+      view =
+        AppScreen
+        |> mount_screen()
+        |> render_info({:change, :draft, "Hello"})
+        |> tap({:study, :send})
+        |> drain_loop()
+
+      assert_receive {:llm_request, _first}
+      cid = assigns(view).conversation.id
+      failed = assigns(view).streams[cid]
+      assert %{status: :error} = failed
+
+      view =
+        view
+        |> take_photo(Png.solid(10, 10, {0, 0, 200}))
+        |> render_info({:change, :draft, "And this?"})
+        |> tap({:study, :send})
+
+      assert assigns(view).preparing != nil
+      view = tap(view, {:study, :retry})
+      assert assigns(view).streams[cid] == failed
+
+      view = view |> render_async() |> drain_loop()
+      assert_receive {:llm_request, request}
+      assert has_picture?(request)
+      refute_receive {:llm_request, _}, 100
+
+      assert Enum.any?(assigns(view).messages, &(&1.text == "And this?"))
+      assert Enum.any?(assigns(view).messages, &(&1.text == "Hello"))
+    end
+
+    test "something kept after the user moved on stays in Materials, not on the new question" do
+      view =
+        AppScreen
+        |> mount_screen()
+        |> tap({:attach, :camera})
+        |> render_info({:permission, :camera, :granted})
+        |> render_info(
+          {:camera, :photo, %{path: tmp("cam.png", Png.solid(4, 4, {9, 9, 9})), width: 4}}
+        )
+
+      {:ok, other} = Library.create_conversation(%{name: "Other", kicker: "STUDY", kind: "Study"})
+      view = view |> tap({:convs, {:open, other.id}}) |> render_async()
+      assert assigns(view).conversation.id == other.id
+
+      assert assigns(view).attachments == []
+      assert assigns(view).toast.text =~ "moved to another conversation"
+      assert [%{kind: :image}] = MaterialStore.list()
+    end
+
+    test "sending while a recording is transcribed waits for that transcript, not a second one" do
+      Whisper.put_text("In the beginning")
+
+      view =
+        AppScreen
+        |> mount_screen()
+        |> tap({:attach, :record})
+        |> render_info({:permission, :microphone, :granted})
+        |> tap({:attach, :stop_recording})
+        |> render_info({:audio, :recorded, %{path: tmp("rec.wav", recording()), duration: 0.4}})
+        # Kept; its transcription starts.
+        |> deliver_one()
+
+      [audio] = assigns(view).attachments
+      assert assigns(view).transcripts[audio.id] == :working
+
+      view = view |> render_info({:change, :draft, "Listen"}) |> tap({:study, :send})
+      assert %{started: false} = assigns(view).preparing
+
+      view = render_async(view)
+      assert [_one] = Whisper.heard()
+      question = Enum.find(assigns(view).messages, &(&1.text == "Listen"))
+      assert [%{id: id}] = question.materials
+      assert id == audio.id
+    end
+
+    test "chips and words added while a question is made ready stay in the composer" do
+      view = AppScreen |> mount_screen() |> take_photo()
+      [first] = assigns(view).attachments
+
+      bytes = Png.solid(6, 6, {0, 90, 0})
+      {:ok, second} = MaterialStore.put(Materials.new(bytes, name: "leaf.png"), bytes, %{})
+
+      view =
+        view
+        |> render_info({:change, :draft, "First"})
+        |> tap({:study, :send})
+
+      assert assigns(view).draft == ""
+      assert assigns(view).attachments == []
+
+      view =
+        view
+        |> tap({:materials, {:ask, second.id}})
+        |> render_info({:change, :draft, "Second"})
+        |> render_async()
+
+      question = Enum.find(assigns(view).messages, &(&1.text == "First"))
+      assert Enum.map(question.materials, & &1.id) == [first.id]
+      assert Enum.map(assigns(view).attachments, & &1.id) == [second.id]
+      assert assigns(view).draft == "Second"
+    end
+
+    test "Try again for a question that was only a photo, deleted since, keeps its Try again" do
+      :ok = Rho.Auth.put_api_key(:anthropic, "sk-ant-api03-test-key-0123456789")
+      {:ok, llm} = FakeLLM.start([[{:error, {:http, 401, "invalid x-api-key"}}]])
+      Application.put_env(:bezalel, Live, llm: {FakeLLM, llm}, retry_base_ms: 1)
+
+      view = AppScreen |> mount_screen() |> take_photo()
+      [photo] = assigns(view).attachments
+      cid = assigns(view).conversation.id
+      view = view |> tap({:study, :send}) |> render_async() |> drain_loop()
+      assert_receive {:llm_request, _first}
+
+      :ok = MaterialStore.delete(photo.id)
+      view = tap(view, {:study, :retry})
+
+      assert assigns(view).toast.text =~ "nothing to ask again"
+      assert %{status: :error} = assigns(view).streams[cid]
+      assert assigns(view).preparing == nil
+      refute_receive {:llm_request, _}, 100
+    end
+
+    test "a question that can't go comes back before words dictated meanwhile" do
+      Application.put_env(:bezalel, :dictation,
+        primary: {MobSpeech.Engine.Fake, script: [:listening, {:partial, "and more"}]}
+      )
+
+      Whisper.put_text({:error, :unavailable})
+      view = AppScreen |> mount_screen() |> record()
+
+      view =
+        view
+        |> render_info({:change, :draft, "Listen"})
+        |> tap({:study, :send})
+        |> tap({:attach, :mic})
+
+      assert assigns(view).dictation != nil
+      view = render_async(view)
+      assert assigns(view).draft == "Listen"
+
+      view = feed_speech(view, &match?({:speech, :partial, "and more"}, &1))
+      assert assigns(view).draft == "Listen and more"
+    end
+
+    test "Try again while another question is on its way says so" do
+      view = AppScreen |> mount_screen() |> take_photo()
+      view = view |> render_info({:change, :draft, "Look"}) |> tap({:study, :send})
+      assert assigns(view).preparing != nil
+
+      view = tap(view, {:study, :ask_again})
+
+      assert %{text: "A question is still on its way." <> _, ask_again: true} =
+               assigns(view).toast
+    end
   end
 
   describe "read aloud" do
@@ -466,6 +685,18 @@ defmodule Bezalel.MaterialsScreenTest do
       {:rho, _session, _event} = message -> view |> render_info(message) |> drain_loop()
     after
       3_000 -> flunk("the loop went quiet")
+    end
+  end
+
+  # Delivers the one start_async result that comes first.
+  defp deliver_one(%{module: module, socket: socket} = view) do
+    case Async.await(socket, 1_000) do
+      {:deliver, name, outcome, socket} ->
+        {:noreply, socket} = module.handle_async(name, outcome, socket)
+        %{view | socket: socket}
+
+      {:dropped, socket} ->
+        deliver_one(%{view | socket: socket})
     end
   end
 
