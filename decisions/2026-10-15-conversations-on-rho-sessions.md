@@ -15,4 +15,5 @@ anything added since). A one-time migration moved old conversations.
 ## Consequences
 The model sees exactly what the chat shows. Messages after a deleted one get
 new ids (copied onto the new branch). Session files only grow. See
-lib/bezalel/library/transcript.ex.
+lib/bezalel/library/transcript.ex (since 2026-10-17 in bezalel_core:
+decisions/2026-10-17-agent-surface-in-bezalel-core.md).

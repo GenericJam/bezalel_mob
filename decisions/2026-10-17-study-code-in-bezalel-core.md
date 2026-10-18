@@ -1,6 +1,7 @@
 # The study code moves to bezalel_core, shared by the phone app and the website
 - Date: 2026-10-17
-- Status: accepted
+- Status: accepted; the point that `Bezalel.Agent.Patterns` is the app's is
+  superseded by 2026-10-17-agent-surface-in-bezalel-core.md
 
 ## Context
 The phone app was built first, so everything lived here, including the code
