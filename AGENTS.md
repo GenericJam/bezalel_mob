@@ -342,6 +342,17 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   across conversation switches until sent or removed, and a material is
   linked ("went with") only when its question is sent; each grid card
   deletes with its × (decisions/2026-10-18-chips-follow-the-composer.md).
+- **Sources** (bezalel_core's `Bezalel.Study.Citation`s; its
+  `docs/` and PR #6 have the design): every study tool returns the
+  records it rests on; the live loop keeps them in the session with the
+  passage card (`keep_details: &Bezalel.Agent.Details.keep_details/2`).
+  Under each reply, `Bezalel.Views.Sources` draws a collapsed SOURCES row
+  (`Reply.sources/1` live, the message's `citations` stored) that opens to
+  the list grouped by work, the ones the reply links first, then "Also
+  consulted"; pages open through Study's `{:open_url, url}`, books are
+  text, and AI translations and the unpublished draft rendering carry
+  their marks and links to the originals. Open or not is the reply's
+  `"<id>:sources"` key in `expanded`.
 - Data: `Bezalel.Library`: each conversation's transcript is its rho
   session (JSONL in `Rho.Session.dir/0`, read by bezalel_core's
   `Bezalel.Library.Transcript`; Delete and Undo are branch moves), SQLite

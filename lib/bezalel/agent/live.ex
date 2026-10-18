@@ -23,9 +23,10 @@ defmodule Bezalel.Agent.Live do
   model sees exactly what earlier loops sent and got, tool results
   included) and writes the question and the reply into it as they happen.
   Pictures stay in the session as the tools and models gave them; of a
-  `lookup_verse` or `word_study` result's details, the passage card
-  (`Bezalel.Agent.Card`) is kept with the result (`:keep_details`), so the
-  chat draws it again from the session.
+  tool result's details, the passage card (`Bezalel.Agent.Card`) and the
+  sources it rests on are kept with the result (`:keep_details`,
+  bezalel_core's `Bezalel.Agent.Details.keep_details/2`), so the chat
+  draws them again from the session.
 
   **One loop per conversation being answered**, started on its first
   question and registered under the conversation's id
@@ -43,7 +44,7 @@ defmodule Bezalel.Agent.Live do
   """
   @behaviour Bezalel.Agent
 
-  alias Bezalel.Agent.Card
+  alias Bezalel.Agent.Details
   alias Bezalel.{Library, Settings}
   alias Bezalel.Study.{Prompt, Tools}
   alias Rho.Dyn.Source
@@ -87,13 +88,6 @@ defmodule Bezalel.Agent.Live do
   @doc "The study system prompt for `prefs` (`Bezalel.Study.Preferences`) on the phone."
   @spec system_prompt(Bezalel.Study.Preferences.t()) :: String.t()
   def system_prompt(prefs), do: Prompt.system_prompt(prefs, surface: @phone_formatting)
-
-  @doc """
-  What a tool result keeps of its details in the session: the passage
-  card, for the tools that name a passage; nothing for the rest.
-  """
-  @spec keep_details(String.t(), term()) :: map() | nil
-  def keep_details(name, details), do: Card.from_tool(name, details)
 
   @impl true
   def ask(conversation_id, text, model, subscriber, attachments) do
@@ -170,7 +164,7 @@ defmodule Bezalel.Agent.Live do
           system_prompt: system_prompt(prefs),
           tools: :registry,
           withhold_tools: withheld() ++ Tools.withheld(prefs),
-          keep_details: &keep_details/2
+          keep_details: &Details.keep_details/2
         ] ++ Application.get_env(:bezalel, __MODULE__, [])
 
       case Rho.start_loop(opts) do
