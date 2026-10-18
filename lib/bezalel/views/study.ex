@@ -20,11 +20,17 @@ defmodule Bezalel.Views.Study do
   made while a reply streams in that conversation waits for it to end (the
   loop holds the session), the deleted message hidden meanwhile
   (`edits`).
+
+  Pushback (bezalel_core's `Bezalel.Agent.Pushback`): the last reply's
+  Pushback button and the conversation's switch (its menu, the ⋯ in the
+  top bar) have the model chosen under Settings → Models review a reply;
+  the critique streams as a CONSULT block of its own, then the answering
+  model's response, as one live reply (`Bezalel.Agent.Reply.pushback/4`).
   """
   import Mob.Sigil
 
   alias Bezalel.{Agent, Library, MaterialStore, Models, Native, Scripture, Settings}
-  alias Bezalel.Agent.{Card, Reply, Storyboard}
+  alias Bezalel.Agent.{Card, Pushback, Reply, Storyboard}
   alias Bezalel.Study.{DB, Lexicon}
   alias Bezalel.Views.{Attach, Helpers, Images, Sources}
   alias Bezalel.Views.Materials, as: MaterialsView
@@ -40,7 +46,7 @@ defmodule Bezalel.Views.Study do
     model = Models.get(assigns.model_id)
     live? = Agent.live?(assigns.account)
     stream = Map.get(assigns.streams, assigns.conversation.id)
-    live_blocks = if stream, do: Reply.blocks(stream), else: []
+    live_blocks = if stream, do: live_blocks(stream), else: []
 
     assigns =
       Map.put(
@@ -192,9 +198,22 @@ defmodule Bezalel.Views.Study do
     """
   end
 
+  # Another model's message (a pushback's critique), set apart, between
+  # the reply it reviews and the answer to it.
+  defp message(%{role: :consult} = m, assigns) do
+    blocks = Enum.map(m.blocks, &block(m, &1, assigns))
+
+    ~MOB"""
+    <Column gap={8} fill_width={true}>
+      {blocks}
+      {actions(m, assigns, nil)}
+    </Column>
+    """
+  end
+
   # The reply streaming in (or failed): its blocks, card and pictures so
   # far (a drawing among them), the messages waiting to steer it, and its
-  # error.
+  # error (a pushback whose critique didn't come: its own).
   defp live(nil, _blocks, _assigns), do: []
 
   defp live(r, blocks, assigns) do
@@ -211,9 +230,46 @@ defmodule Bezalel.Views.Study do
       {Sources.render(pseudo.id, Reply.sources(r), assigns.expanded)}
       {pending}
       {UsageView.failure(r, assigns)}
+      {pushback_failure(r)}
     </Column>
     """
   end
+
+  # A live reply's blocks; a critique that never came shows as its error
+  # instead (`pushback_failure/1`).
+  defp live_blocks(%Reply{reason: :consult_failed} = r),
+    do: Enum.reject(Reply.blocks(r), &(&1["id"] == "consult"))
+
+  defp live_blocks(r), do: Reply.blocks(r)
+
+  # No run failed, so no Try again of the question: the critique can be
+  # asked for again (its round wasn't used).
+  defp pushback_failure(%Reply{reason: :consult_failed, consult: %{model: critic}} = r) do
+    note =
+      Pushback.label(critic) <> " didn't push back on this answer. The answer stands as it was."
+
+    button = &UI.pill_button(&1, &2, :outline, height: 40, fill: false, text_size: 13)
+
+    buttons = [
+      button.("Ask for pushback again", {self(), {:study, :pushback}}),
+      button.("Open Settings", {self(), {:tab, :settings}})
+    ]
+
+    UI.card(
+      [
+        UI.kicker("Pushback didn't come", :error),
+        ~MOB(<Text text={r.error} text_size={14} line_height={1.5} text_color={:on_surface} />),
+        ~MOB(<Text text={note} text_size={12} line_height={1.4} text_color={:muted} />),
+        ~MOB(<Wrap spacing={10} run_spacing={10} fill_width={true}>
+  {buttons}
+</Wrap>)
+      ],
+      padding: 16,
+      gap: 10
+    )
+  end
+
+  defp pushback_failure(_reply), do: []
 
   defp queued(text) do
     ~MOB"""
@@ -232,16 +288,27 @@ defmodule Bezalel.Views.Study do
 
   defp block(message, b, assigns) do
     key = Helpers.block_key(message, b)
-    kind = if b["id"] == "sum", do: :summary, else: :aside
     open? = MapSet.member?(assigns.expanded, key)
+    tap = {self(), {:study, {:block, key}}}
+    kind = block_kind(b)
 
     rest =
       if MapSet.member?(assigns.markdown, key),
         do: markdown(key, b["rest"], kind),
         else: b["rest"]
 
-    UI.block(b["type"], b["first"], rest, open?, {self(), {:study, {:block, key}}}, kind)
+    case kind do
+      :consult ->
+        UI.consult_block(Pushback.title(b["model"], b["purpose"]), b["first"], rest, open?, tap)
+
+      kind ->
+        UI.block(b["type"], b["first"], rest, open?, tap, kind)
+    end
   end
+
+  defp block_kind(%{"type" => "CONSULT"}), do: :consult
+  defp block_kind(%{"id" => "sum"}), do: :summary
+  defp block_kind(_block), do: :aside
 
   # A block's body is Markdown (the model's, a tool's) in a native view
   # (mob_markdown), its id from the block's key: one atom per block shown.
@@ -258,7 +325,8 @@ defmodule Bezalel.Views.Study do
 
   @doc false
   def markdown_keys(messages, {live, live_blocks}, expanded) do
-    stored = for %{role: :agent} = m <- messages, b <- m.blocks, do: {m, b}
+    stored =
+      for %{role: role} = m <- messages, role in [:agent, :consult], b <- m.blocks, do: {m, b}
 
     (stored ++ Enum.map(live_blocks, &{live, &1}))
     |> Enum.reverse()
@@ -429,7 +497,7 @@ defmodule Bezalel.Views.Study do
 
     items =
       if model_name,
-        do: name ++ speaker(m, assigns) ++ [tap_target | chips],
+        do: name ++ speaker(m, assigns) ++ pushback_button(m, assigns) ++ [tap_target | chips],
         else: chips ++ [tap_target]
 
     row = ~MOB"""
@@ -450,6 +518,37 @@ defmodule Bezalel.Views.Study do
           {line}
         </Column>
         """
+    end
+  end
+
+  # Pushback, on the last reply when it can be pushed back on
+  # (`Bezalel.Agent.Pushback.offered?/2`) and nothing is streaming in the
+  # conversation; live replies only (a scripted one has no model to answer).
+  defp pushback_button(m, assigns) do
+    if Agent.live?(assigns.account) and Pushback.offered?(assigns.messages, m) and
+         not Map.has_key?(assigns.streams, assigns.conversation.id) do
+      tap = {self(), {:study, :pushback}}
+
+      [
+        ~MOB"""
+        <Box
+          id={"pushback-" <> m.id}
+          border_color={:secondary}
+          border_width={1}
+          corner_radius={14}
+          height={28}
+          padding_left={10}
+          padding_right={10}
+          align="center"
+          fill_width={false}
+          on_tap={tap}
+        >
+          <Text text="Pushback" font={:ui_medium} text_size={12} text_color={:secondary} />
+        </Box>
+        """
+      ]
+    else
+      []
     end
   end
 
@@ -510,12 +609,14 @@ defmodule Bezalel.Views.Study do
     end
   end
 
-  # A finished live reply (found as `store/4` finds it), read aloud if the
-  # user asked.
-  defp read_aloud(socket, cid, %Reply{seen: [first | _]}) do
+  # A finished live reply (found as `store/4` finds it: by its last entry,
+  # the answer to a critique in a pushback), read aloud if the user asked.
+  defp read_aloud(socket, cid, %Reply{seen: [_ | _] = seen}) do
+    last = List.last(seen)
+
     with true <- socket.assigns.read_aloud,
          true <- cid == socket.assigns.conversation.id,
-         %{} = m <- Enum.find(socket.assigns.messages, &(first in &1.entries)) do
+         %{} = m <- Enum.find(socket.assigns.messages, &(last in &1.entries)) do
       speak(socket, m.id, speakable(m))
     else
       _ -> socket
@@ -526,6 +627,64 @@ defmodule Bezalel.Views.Study do
 
   defp auto_speak(socket, message) do
     if socket.assigns.read_aloud, do: speak(socket, message.id, speakable(message)), else: socket
+  end
+
+  @doc """
+  The conversation's menu (a sheet from the ⋯ in Study's top bar): its
+  Pushback switch, with who pushes back (Settings → Models, Pushback
+  from) and who answers.
+  """
+  def conversation_sheet(assigns) do
+    c = assigns.conversation
+    critic = assigns.study.pushback_model
+    toggle = {self(), {:study, :auto_pushback}}
+    choose = {self(), {:settings, :pushback_models}}
+
+    {note, button} =
+      case critic && Rho.Consult.allowed(critic) do
+        nil ->
+          {"Choose who pushes back in Settings → Models (Pushback from). Until then, nothing is pushed back on.",
+           [
+             UI.pill_button("Choose who pushes back", choose, :outline,
+               height: 40,
+               fill: false,
+               text_size: 13
+             )
+           ]}
+
+        :ok ->
+          {"#{Pushback.label(critic)} reviews each finished reply here, and #{Models.get(assigns.model_id).name} answers its points: revising where they're right, standing its ground with reasons where they aren't. One round per reply.",
+           []}
+
+        {:error, _why} ->
+          {"#{Pushback.label(critic)} can't push back until its provider is signed in (Settings → Account), or choose another model.",
+           [
+             UI.pill_button("Choose who pushes back", choose, :outline,
+               height: 40,
+               fill: false,
+               text_size: 13
+             )
+           ]}
+      end
+
+    [
+      ~MOB(<Text text={c.name} font={:display} text_size={24} text_color={:on_background} />),
+      UI.kicker("Pushback"),
+      ~MOB(<Toggle
+  id="auto-pushback"
+  value={c.pushback}
+  label="Push back on each reply"
+  on_change={toggle}
+/>),
+      ~MOB(<Text text={note} text_size={14} line_height={1.5} text_color={:on_background} />),
+      button,
+      ~MOB(<Text
+  text="Or tap Pushback under the last reply, or ask in your own words: “have GPT push back”."
+  text_size={12}
+  line_height={1.45}
+  text_color={:muted}
+/>)
+    ]
   end
 
   @doc "The top bar's trailing control: Expand all / Collapse all."
@@ -617,6 +776,45 @@ defmodule Bezalel.Views.Study do
       Reply.running?(socket.assigns.streams[cid]) -> {:noreply, socket}
       socket.assigns.preparing != nil -> {:noreply, still_sending(socket, "Try again")}
       true -> {:noreply, respond(socket)}
+    end
+  end
+
+  # The Pushback button (and Ask for pushback again): the critic chosen in
+  # Settings reviews the last reply, then the model chosen now answers it.
+  # What stops it (no critic, its provider not signed in, a reply still
+  # running, one round per reply) is said as the toast.
+  def handle(:pushback, socket) do
+    cid = socket.assigns.conversation.id
+    model = Helpers.model(socket).id
+    critic = socket.assigns.study.pushback_model
+
+    cond do
+      Reply.running?(socket.assigns.streams[cid]) ->
+        {:noreply, Helpers.toast(socket, "Wait for the answer to finish, then ask for pushback.")}
+
+      socket.assigns.preparing != nil ->
+        {:noreply, still_sending(socket, "Ask for pushback")}
+
+      true ->
+        case Agent.pushback(cid, model, critic, self()) do
+          {:ok, session_id} ->
+            {:noreply,
+             socket |> Socket.assign(:menu, nil) |> pushing_back(cid, model, critic, session_id)}
+
+          {:error, sentence} ->
+            {:noreply, Helpers.toast(socket, sentence)}
+        end
+    end
+  end
+
+  # The conversation's menu (the ⋯ in Study's top bar): its Pushback switch.
+  def handle(:conversation_menu, socket),
+    do: {:noreply, Socket.assign(socket, sheet: :conversation, menu: nil)}
+
+  def handle({:auto_pushback, on?}, socket) do
+    case Library.put_pushback(socket.assigns.conversation.id, on?) do
+      nil -> {:noreply, socket}
+      conversation -> {:noreply, Socket.assign(socket, :conversation, conversation)}
     end
   end
 
@@ -1014,12 +1212,18 @@ defmodule Bezalel.Views.Study do
   defp on_event(cid, reply, %{type: :agent_end} = event, socket),
     do: finish(socket, cid, Reply.apply(reply, event))
 
+  # A pushback can end before any run: its critique stopped or failed
+  # (`consult_end`).
   defp on_event(cid, reply, event, socket) do
     reply = Reply.apply(reply, event)
 
-    socket
-    |> put_stream(cid, reply)
-    |> Images.load(reply.images ++ Images.material_images(reply.materials))
+    if Reply.running?(reply) do
+      socket
+      |> put_stream(cid, reply)
+      |> Images.load(reply.images ++ Images.material_images(reply.materials))
+    else
+      finish(socket, cid, reply)
+    end
   end
 
   # The loop took a steering message in: the reply so far is done (the
@@ -1028,18 +1232,25 @@ defmodule Bezalel.Views.Study do
   defp steered(socket, cid, reply, text),
     do: store(socket, cid, reply, Reply.continue(reply, text))
 
+  # A pushback whose critique failed: no run failed (nothing to drop or
+  # ask again). Its error stays in the chat where the critique would have
+  # been, with a way to ask for it again; the loop stays (idle) for that.
+  defp finish(socket, cid, %Reply{status: :done, reason: :consult_failed} = reply),
+    do: socket |> put_stream(cid, %{reply | pending: []}) |> unsend(cid, reply.pending)
+
   # Messages sent as the run was ending: after a normal end the loop runs
   # them next, as a new run; at its limits (`:max_iterations`, `:cost_cap`)
   # it drops them, so they go back. A message steered in after the limit's
   # end may have started a run the screen won't follow: the loop goes too.
   # A finished reply in the open conversation is read aloud when the user
-  # asked for that (Settings → Voice).
+  # asked for that (Settings → Voice), and pushed back on when the
+  # conversation's Pushback switch is on (`auto_pushback/3`).
   defp finish(socket, cid, %Reply{status: :done, reason: reason} = reply)
        when reply.pending == [] or reason in [:max_iterations, :cost_cap] do
     socket = socket |> store(cid, reply, nil) |> read_aloud(cid, reply)
 
     socket =
-      if reply.pending == [], do: release_if_unused(socket, cid), else: release(socket, cid)
+      if reply.pending == [], do: auto_pushback(socket, cid, reply), else: release(socket, cid)
 
     unsend(socket, cid, reply.pending)
   end
@@ -1073,6 +1284,35 @@ defmodule Bezalel.Views.Study do
     |> unsend(cid, reply.pending)
   end
 
+  # The conversation's Pushback switch: the reply that just ended is
+  # pushed back on (`Bezalel.Agent.auto/4` skips one that can't be: the
+  # answer to a critique, one critiqued within its turn); the loop stays
+  # for it. A critic that can't push back is said, in the open
+  # conversation; the loop then goes as usual.
+  defp auto_pushback(socket, cid, reply) do
+    critic = socket.assigns.study.pushback_model
+
+    with %Library.Conversation{pushback: true} <- Library.get_conversation(cid),
+         {:ok, session_id} <- Agent.auto(cid, reply, critic, self()) do
+      pushing_back(socket, cid, reply.model, critic, session_id)
+    else
+      {:error, sentence} when cid == socket.assigns.conversation.id ->
+        socket |> Helpers.toast(sentence) |> release_if_unused(cid)
+
+      _skip ->
+        release_if_unused(socket, cid)
+    end
+  end
+
+  # A pushback started on the conversation's loop: it streams as a reply
+  # of its own (`Bezalel.Agent.Reply.pushback/4`), its critique first.
+  defp pushing_back(socket, cid, model, critic, session_id) do
+    socket
+    |> Socket.assign(:sessions, Map.put(socket.assigns.sessions, session_id, cid))
+    |> drop_stream(cid)
+    |> put_stream(cid, Reply.pushback(cid, model, critic, session_id))
+  end
+
   # Messages the loop didn't take in go back to the draft, or, for a
   # conversation that isn't open, into it as questions for the next reply.
   defp unsend(socket, _cid, []), do: socket
@@ -1098,7 +1338,9 @@ defmodule Bezalel.Views.Study do
 
   # A reply (or the part of it before a steering message) is in the
   # session: the stream gives way to it (or to `next`, the run's next
-  # reply), keeping which of its blocks were open.
+  # reply), keeping which of its blocks were open. A pushback is stored as
+  # two messages, the critique and the answer to it: each open block goes
+  # to the one that has it, anything else (its sources list) to the answer.
   defp store(socket, cid, reply, next) do
     :ok = Library.touch(cid)
     prefix = live_id(cid) <> ":"
@@ -1109,18 +1351,27 @@ defmodule Bezalel.Views.Study do
     socket = reload_if_open(socket, cid)
 
     stored =
-      Enum.find(socket.assigns.messages, fn m ->
-        cid == socket.assigns.conversation.id and reply.seen != [] and
-          hd(reply.seen) in m.entries
-      end)
+      if cid == socket.assigns.conversation.id,
+        do:
+          Enum.filter(socket.assigns.messages, fn m ->
+            Enum.any?(m.entries, &(&1 in reply.seen))
+          end),
+        else: []
+
+    reopened =
+      for key <- open,
+          block_id = String.replace_prefix(key, prefix, ""),
+          m =
+            Enum.find(stored, fn m -> Enum.any?(m.blocks, &(&1["id"] == block_id)) end) ||
+              List.last(stored),
+          m != nil,
+          into: MapSet.new(),
+          do: "#{m.id}:#{block_id}"
 
     expanded =
-      if stored,
-        do:
-          socket.assigns.expanded
-          |> MapSet.union(MapSet.new(open, &String.replace_prefix(&1, prefix, "#{stored.id}:")))
-          |> MapSet.union(Helpers.summaries_open([stored])),
-        else: socket.assigns.expanded
+      socket.assigns.expanded
+      |> MapSet.union(reopened)
+      |> MapSet.union(Helpers.summaries_open(stored))
 
     socket |> Socket.assign(:expanded, expanded) |> Helpers.refresh()
   end
@@ -1303,9 +1554,11 @@ defmodule Bezalel.Views.Study do
 
       m ->
         text =
-          if m.role == :agent,
-            do: "Reply deleted. The agent won’t see it.",
-            else: "Message deleted. The agent won’t see it."
+          case m.role do
+            :agent -> "Reply deleted. The agent won’t see it."
+            :consult -> "Pushback deleted. The agent won’t see it."
+            :user -> "Message deleted. The agent won’t see it."
+          end
 
         socket
         |> Socket.assign(:menu, nil)
@@ -1320,6 +1573,7 @@ defmodule Bezalel.Views.Study do
 
   @doc false
   def copy_text(%{role: :user, text: text}), do: text
+  def copy_text(%{role: :consult, text: text}), do: text
 
   def copy_text(%{blocks: blocks, passage: passage, card: card, image: image}) do
     summary = for b <- blocks, b["id"] == "sum", do: summary_text(b)

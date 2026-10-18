@@ -19,7 +19,7 @@ Muster) applies on top.
 | **bezalel_mob** (this, GitHub GenericJam/bezalel_mob, public; was GenericJam/bezalel) | the phone app; `data/` builds the study packs | — |
 | **bezalel_core** (GenericJam/bezalel_core) | the study tools, their pack access, the corpus registry and the system prompt; the agent's surface (reply fold, passage card, transcript reading and branch moves); shared with the website (bezalel_ca); the fixture packs | GitHub, pinned (`sibling/3`) |
 | **mob_bezalel** (GenericJam/mob_bezalel) | the style package: themes, palette, fonts, UI composites | GitHub, pinned (`sibling/3`) |
-| **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn | Hex, `~> 0.2` (attachments by reference) (`sibling/2`) |
+| **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn, consulting another model | Hex, `~> 0.3` (attachments by reference; `Rho.Consult`, `ask_model`) (`sibling/2`) |
 | **mob_secure_store** (GenericJam/mob_secure_store) | Keychain / Keystore secrets plugin | GitHub, pinned until on Hex |
 | **mob_markdown** (GenericJam/mob_markdown) | native Markdown views (replies, tool results) | GitHub, pinned until on Hex |
 | mob_photos, mob_camera, mob_speech, mob_whisper, mob_media | photo library, camera, dictation, Whisper on the phone; media info, audio to PCM, video frames (Materials) | Hex (signed) |
@@ -411,7 +411,7 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   only knows the `:bezalel` app's own modules). How they were ported, the
   pack access and the differences from studybible-mcp: bezalel_core's
   `docs/study_tools.md`.
-- **rho** (GenericJam/rho, on Hex, https://hexdocs.pm/rho) is the agent core:
+- **rho** (GenericJam/rho, on Hex `~> 0.3`, https://hexdocs.pm/rho) is the agent core:
   `Rho.Supervisor` starts in `Bezalel.App.on_start`, configured in
   `config/config.exs` (`config :rho`: data dir from `Mob.data_dir/0`, the
   secure store, `Mob.Device.open_url/1`, app name and hints). Read rho's
@@ -459,6 +459,24 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   loop takes rho's registry (the study tools, plus the tools built in the
   Workshop) and withholds the `dyn_*` tools and the study tools whose every
   source the user switched off (Settings → Study, below).
+- **Pushback** (bezalel_core's `Bezalel.Agent.Pushback`;
+  decisions/2026-10-18-pushback-on-the-phone.md): another model reviews a
+  finished reply and the answering model responds. Settings → Models:
+  Answers, Pushback from (none by default) and Pictures by (study
+  preferences `pushback_model`, `image_model`; a model whose provider
+  isn't signed in is listed, not choosable, with what it needs). The
+  switch is the conversation's (`conversations.pushback`,
+  `Library.put_pushback/2`), in its menu (the ⋯ in Study's top bar,
+  sheet `:conversation`); the Pushback button sits on the last reply when
+  `Pushback.offered?/2`. Both go through `Bezalel.Agent.pushback/4` /
+  `auto/4`; the pushback streams as a reply of its own
+  (`Reply.pushback/4`: the CONSULT block, `MobBezalel.UI.consult_block/5`,
+  then the answer). A failed critique (`:consult_failed`) stays as a card
+  with Ask for pushback again and never runs the failed-run path. The
+  loop also has rho's `ask_model` (`Rho.Tools.Consult`, "have GPT push
+  back"), with `config :rho, :consult_system` giving it the same brief.
+  Tests: `test/bezalel/pushback_test.exs` (the fake model answers the
+  critic too: a consult uses the loop's model client).
 - **Settings → Study** (`Bezalel.Views.Settings`; decisions/2026-10-17-study-preferences.md):
   the user's `Bezalel.Study.Preferences`, kept in `Mob.State` under
   `:bezalel_study_preferences` as a plain map (`Bezalel.Settings.study_preferences/0,1`,

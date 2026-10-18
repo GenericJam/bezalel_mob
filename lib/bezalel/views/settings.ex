@@ -1,6 +1,7 @@
 defmodule Bezalel.Views.Settings do
   @moduledoc """
-  The Settings tab: account, appearance, model, study (translation,
+  The Settings tab: account, appearance, models (who answers, who pushes
+  back, who draws pictures), study (translation,
   results per list, scripture labels, and the approach and sources
   screens, `Bezalel.ApproachScreen` and `Bezalel.StudySourcesScreen`), the
   study library (`Bezalel.Views.StudyLibrary`), usage
@@ -9,7 +10,9 @@ defmodule Bezalel.Views.Settings do
   import Mob.Sigil
 
   alias Bezalel.{Account, Agent, Models, Settings}
+  alias Bezalel.Agent.Pushback
   alias Bezalel.Study.{Sources, Translations}
+  alias Bezalel.Study.Tools.DrawImage
   alias Bezalel.Views.{Helpers, StudyLibrary}
   alias Bezalel.Views.Usage, as: UsageView
   alias Mob.Socket
@@ -22,12 +25,10 @@ defmodule Bezalel.Views.Settings do
 
   @doc "The Settings body."
   def render(assigns) do
-    model = Models.get(assigns.model_id)
     mode_index = Enum.find_index(Settings.modes(), &(&1 == assigns.mode))
     cover_index = Enum.find_index(Settings.covers(), &(&1 == assigns.cover))
     mode_opts = for m <- Settings.modes(), do: {label(m), {self(), {:settings, {:mode, m}}}}
     cover_opts = for c <- Settings.covers(), do: {label(c), {self(), {:settings, {:cover, c}}}}
-    models_tap = {self(), {:settings, :models}}
     gallery_tap = {self(), {:settings, :gallery}}
 
     system_note =
@@ -68,7 +69,7 @@ defmodule Bezalel.Views.Settings do
     sections = [
       section("Account", account(assigns)),
       section("Appearance", [appearance]),
-      section("Model", [model_row(model, assigns.account, models_tap), note(model_note)]),
+      section("Models", models(assigns) ++ [note(model_note)]),
       section("Study", study(assigns)),
       section("Voice", voice(assigns)),
       section("Study library", StudyLibrary.render(assigns)),
@@ -420,14 +421,59 @@ defmodule Bezalel.Views.Settings do
     end
   end
 
-  defp model_row(model, account, tap) do
-    note =
-      if Models.available?(model, account),
-        do: Auth.label(model.provider),
-        else: "Needs your " <> Models.needs(model.provider)
+  # Who answers, who pushes back, who draws: each a row that opens its
+  # chooser.
+  defp models(assigns) do
+    account = assigns.account
+    model = Models.get(assigns.model_id)
+    critic = assigns.study.pushback_model
+    image = Enum.find(DrawImage.models(), &(&1.id == assigns.study.image_model))
+
+    pushback =
+      case critic && Auth.provider_for_model(critic) do
+        {:ok, provider} ->
+          {Pushback.label(critic), access(provider, account), Models.dot(provider)}
+
+        _none ->
+          {"None", "Choose a model to review replies, on the button or a conversation's switch",
+           nil}
+      end
+
+    [
+      choice_row("Answers", {model.name, access(model.provider, account), model.dot},
+        tap: {self(), {:settings, :models}},
+        id: "settings-model"
+      ),
+      choice_row("Pushback from", pushback,
+        tap: {self(), {:settings, :pushback_models}},
+        id: "settings-pushback"
+      ),
+      choice_row(
+        "Pictures by",
+        {image.label, access(image.provider, account), Models.dot(image.provider)},
+        tap: {self(), {:settings, :image_models}},
+        id: "settings-images"
+      )
+    ]
+  end
+
+  defp access(provider, account) do
+    if match?(%{signed_in: true}, account[provider]),
+      do: Auth.label(provider),
+      else: "Needs your " <> Models.needs(provider)
+  end
+
+  defp choice_row(label, {name, note, dot}, opts) do
+    dot =
+      if dot,
+        do: [
+          ~MOB(<Box width={10} height={10} corner_radius={5} background={dot} fill_width={false} />)
+        ],
+        else: []
 
     ~MOB"""
     <Box
+      id={opts[:id]}
       background={:surface}
       border_color={:border}
       border_width={1}
@@ -437,12 +483,13 @@ defmodule Bezalel.Views.Settings do
       padding_top={10}
       padding_bottom={10}
       fill_width={true}
-      on_tap={tap}
+      on_tap={opts[:tap]}
     >
       <Row gap={12} align={:center} fill_width={true}>
-        <Box width={10} height={10} corner_radius={5} background={model.dot} fill_width={false} />
+        {dot}
         <Column gap={2} weight={1}>
-          <Text text={model.name} font={:ui_medium} text_size={15} text_color={:on_surface} />
+          {UI.kicker(label)}
+          <Text text={name} font={:ui_medium} text_size={15} text_color={:on_surface} />
           <Text text={note} text_size={12} text_color={:muted} />
         </Column>
         <Text text="Change" font={:ui_medium} text_size={13} text_color={:secondary} />
@@ -479,6 +526,19 @@ defmodule Bezalel.Views.Settings do
   end
 
   def handle(:models, socket), do: {:noreply, Socket.assign(socket, :sheet, :models)}
+
+  def handle(:pushback_models, socket),
+    do: {:noreply, Socket.assign(socket, :sheet, :pushback_models)}
+
+  def handle(:image_models, socket), do: {:noreply, Socket.assign(socket, :sheet, :image_models)}
+
+  # Study preferences both (bezalel_core's Bezalel.Study.Preferences): the
+  # chooser closes on a choice.
+  def handle({:pushback_model, spec}, socket),
+    do: {:noreply, socket |> put_study(pushback_model: spec) |> Socket.assign(:sheet, nil)}
+
+  def handle({:image_model, id}, socket),
+    do: {:noreply, socket |> put_study(image_model: id) |> Socket.assign(:sheet, nil)}
 
   def handle({:sign_in, provider}, socket) do
     case Login.begin(provider) do

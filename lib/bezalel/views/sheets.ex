@@ -1,13 +1,15 @@
 defmodule Bezalel.Views.Sheets do
   @moduledoc """
-  The bottom sheets: choose a model, confirm a delete, a Hebrew word (the
+  The bottom sheets: choose a model (to answer, to push back, to draw),
+  the conversation's menu, confirm a delete, a Hebrew word (the
   storyboard's, or a word from a live reply's passage card), the
   first-launch offer of the core study pack, approving a Workshop proposal.
   """
   import Mob.Sigil
 
   alias Bezalel.{Models, Scripture}
-  alias Bezalel.Views.{Attach, Stills, StudyLibrary, Workshop}
+  alias Bezalel.Study.Tools.DrawImage
+  alias Bezalel.Views.{Attach, Stills, Study, StudyLibrary, Workshop}
   alias MobBezalel.UI
 
   @doc "The sheet for `assigns.sheet`, or nothing."
@@ -56,6 +58,77 @@ defmodule Bezalel.Views.Sheets do
   defp content(:attach, _assigns), do: Attach.menu_sheet()
   defp content({:video_notice, source}, _assigns), do: Attach.video_sheet(source)
   defp content({:stills, _video_id}, assigns), do: Stills.sheet(assigns)
+  defp content(:conversation, assigns), do: Study.conversation_sheet(assigns)
+
+  # Pushback from: none, or any model, its provider signed in or not (then
+  # shown, not chosen, with what it needs).
+  defp content(:pushback_models, assigns) do
+    current = assigns.study.pushback_model
+
+    none =
+      choice_row(%{
+        id: "pushback-none",
+        name: "No pushback",
+        note: "Replies stand as the answering model gives them",
+        dot: nil,
+        selected: current == nil,
+        tap: {self(), {:settings, {:pushback_model, nil}}}
+      })
+
+    groups =
+      for {provider, group, models} <- Models.all_groups() do
+        rows =
+          for m <- models do
+            available? = Models.available?(m, assigns.account)
+
+            choice_row(%{
+              id: "pushback-" <> m.id,
+              name: m.name,
+              note: if(available?, do: Rho.Auth.label(provider), else: "Needs your " <> m.note),
+              dot: m.dot,
+              selected: current != nil and Rho.Models.same?(m.id, current),
+              tap: if(available?, do: {self(), {:settings, {:pushback_model, m.id}}})
+            })
+          end
+
+        group_column(group, rows)
+      end
+
+    [
+      sheet_title("Pushback from", "Reviews each reply it's asked to"),
+      ~MOB(<Text
+  text="Another model reads a finished reply the way a colleague reviews code: claims against the sources, the Hebrew and Greek, readings left out, overreach. The model that answered then responds to each point."
+  text_size={13}
+  line_height={1.5}
+  text_color={:muted}
+/>),
+      none
+      | groups
+    ]
+  end
+
+  # Pictures by: the models draw_image can draw with.
+  defp content(:image_models, assigns) do
+    rows =
+      for m <- DrawImage.models() do
+        available? = match?(%{signed_in: true}, assigns.account[m.provider])
+
+        choice_row(%{
+          id: "image-" <> m.id,
+          name: m.label,
+          note:
+            if(available?,
+              do: Rho.Auth.label(m.provider),
+              else: "Needs your " <> Models.needs(m.provider)
+            ),
+          dot: Models.dot(m.provider),
+          selected: m.id == assigns.study.image_model,
+          tap: if(available?, do: {self(), {:settings, {:image_model, m.id}}})
+        })
+      end
+
+    [sheet_title("Pictures by", "Draws when a reply calls for a picture") | rows]
+  end
 
   defp content({:delete_material, id}, _assigns) do
     confirm = {self(), {:materials, {:confirm_delete, id}}}
@@ -282,6 +355,66 @@ defmodule Bezalel.Views.Sheets do
     if Bezalel.Agent.live?(account),
       do: "Ask #{model.name} about #{translit}",
       else: "Ask about #{translit}"
+  end
+
+  defp sheet_title(title, aside) do
+    ~MOB"""
+    <Column gap={4} fill_width={true}>
+      <Text text={title} font={:display} text_size={24} text_color={:on_background} />
+      <Text text={aside} text_size={12} text_color={:muted} />
+    </Column>
+    """
+  end
+
+  defp group_column(group, rows) do
+    ~MOB"""
+    <Column gap={6} fill_width={true}>
+      {UI.kicker(group)}
+      {rows}
+    </Column>
+    """
+  end
+
+  # A model to choose: the chosen one outlined in the accent; one that
+  # can't be chosen (`tap` nil) on the page ground in muted ink, saying
+  # what it needs.
+  defp choice_row(row) do
+    border = if row.selected, do: :secondary, else: :border
+    {ground, ink} = if row.tap, do: {:surface, :on_surface}, else: {:background, :muted}
+
+    dot =
+      if row.dot,
+        do: [
+          ~MOB(<Box width={10} height={10} corner_radius={5} background={row.dot} fill_width={false} />)
+        ],
+        else: []
+
+    props =
+      %{
+        id: row.id,
+        background: ground,
+        border_color: border,
+        border_width: 1.5,
+        corner_radius: 16,
+        padding_left: 14,
+        padding_right: 14,
+        padding_top: 8,
+        padding_bottom: 8,
+        fill_width: true
+      }
+      |> then(&if(row.tap, do: Map.put(&1, :on_tap, row.tap), else: &1))
+
+    content = ~MOB"""
+    <Row gap={12} align={:center} fill_width={true}>
+      {dot}
+      <Column gap={2} weight={1}>
+        <Text text={row.name} font={:ui_medium} text_size={15} text_color={ink} />
+        <Text text={row.note} text_size={12} text_color={:muted} />
+      </Column>
+    </Row>
+    """
+
+    %{type: :box, props: props, children: [content]}
   end
 
   defp no_models do

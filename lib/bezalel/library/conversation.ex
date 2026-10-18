@@ -6,6 +6,7 @@ defmodule Bezalel.Library.Conversation do
   written); `message_count` is what the shelf shows. `deleted_at` is set
   while a delete can still be undone (`Bezalel.Library.delete_conversation/1`):
   the conversation is off the shelf until it's purged or put back.
+  `pushback` is its Pushback switch (`Bezalel.Library.put_pushback/2`).
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -18,6 +19,7 @@ defmodule Bezalel.Library.Conversation do
     field :session_file, :string
     field :message_count, :integer, default: 0
     field :deleted_at, :utc_datetime_usec
+    field :pushback, :boolean, default: false
     timestamps(type: :utc_datetime_usec)
   end
 

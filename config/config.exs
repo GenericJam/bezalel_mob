@@ -41,6 +41,12 @@ config :rho,
 
 config :rho, :resolve_attachment, {Bezalel.Materials, :resolve, []}
 
+# Another model's critique (Pushback, bezalel_core's Bezalel.Agent.Pushback):
+# a critique the lead asks for itself (rho's ask_model, "have Gemini push
+# back") gets the same study critic's brief as the Pushback button and the
+# per-conversation switch.
+config :rho, :consult_system, {Bezalel.Agent.Pushback, :system, []}
+
 # The Dyn layer: the study tools the Workshop builds (Bezalel.Workshop,
 # decisions/2026-10-15-workshop-on-dyn.md). The namespace names the
 # generations on disk, so it stays. Built code may read the study library

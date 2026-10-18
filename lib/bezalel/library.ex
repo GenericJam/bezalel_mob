@@ -111,6 +111,18 @@ defmodule Bezalel.Library do
   end
 
   @doc """
+  Turns the conversation's Pushback switch on or off: when on, each
+  finished reply in it is pushed back on (`Bezalel.Agent.auto/4`). Leaves
+  its place on the shelf alone. Returns the conversation as it is now (nil
+  once it's off the shelf).
+  """
+  @spec put_pushback(integer(), boolean()) :: Conversation.t() | nil
+  def put_pushback(id, on?) when is_boolean(on?) do
+    Repo.update_all(from(c in shelf(), where: c.id == ^id), set: [pushback: on?])
+    get_conversation(id)
+  end
+
+  @doc """
   Deletes a conversation: it's off the shelf now (the reads above don't
   see it, writes to it do nothing) and kept until `purge/1`, so
   `undelete/1` can put it back as it was. The conversation must have no

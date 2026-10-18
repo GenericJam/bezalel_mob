@@ -61,6 +61,19 @@ defmodule Bezalel.Models do
         do: {group(provider), models}
   end
 
+  @doc """
+  Every provider's models, signed in or not: `[{provider, group,
+  [model]}]`, in rho's provider order (Settings → Models, Pushback from,
+  which shows what a model needs before it can be chosen).
+  """
+  @spec all_groups() :: [{Auth.provider(), String.t(), [model()]}]
+  def all_groups do
+    for provider <- Auth.providers(),
+        models = catalog(provider),
+        models != [],
+        do: {provider, group(provider), models}
+  end
+
   @doc "Whether `model` can be used with the credentials in `status`."
   @spec available?(model(), map()) :: boolean()
   def available?(model, status), do: match?(%{signed_in: true}, status[model.provider])
