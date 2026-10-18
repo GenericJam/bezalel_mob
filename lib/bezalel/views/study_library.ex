@@ -19,7 +19,8 @@ defmodule Bezalel.Views.StudyLibrary do
     "notes" => "Notes",
     "lxx" => "Septuagint",
     "ancient" => "Ancient sources",
-    "graph" => "People and places"
+    "graph" => "People and places",
+    "translations" => "NET Bible"
   }
 
   # ── State ─────────────────────────────────────────────────────────────────
@@ -110,6 +111,7 @@ defmodule Bezalel.Views.StudyLibrary do
   text_color={:on_surface}
 />),
           metered_note(assigns, Enum.any?(status.packs, &(&1.installed == nil))),
+          net_note(assigns.study, status),
           note(empty)
         ],
         padding: 14,
@@ -229,6 +231,19 @@ defmodule Bezalel.Views.StudyLibrary do
 
   defp metered_note(_assigns, _missing), do: []
 
+  # The NET (the default translation) is in a pack of its own; without it
+  # the tools quote the BSB from core, and say so.
+  defp net_note(%{translation: "net"}, status) do
+    if installed?(status, "translations"),
+      do: [],
+      else:
+        note(
+          "Your translation, the NET Bible, needs the NET Bible pack. Until it's on this phone, the study tools quote the BSB from the core pack and say so."
+        )
+  end
+
+  defp net_note(_prefs, _status), do: []
+
   defp note(nil), do: []
 
   defp note(text),
@@ -276,7 +291,7 @@ defmodule Bezalel.Views.StudyLibrary do
       ~MOB(<Text text={sizes} font={:ui_medium} text_size={14} text_color={:on_background} />),
       metered,
       note(
-        "Study works without it, but the tools will say the pack is missing. The core pack and the optional ones (notes, Septuagint, ancient sources, people and places) are in Settings → Study library."
+        "Study works without it, but the tools will say the pack is missing. The core pack and the optional ones (the NET Bible, notes, Septuagint, ancient sources, people and places) are in Settings → Study library."
       ),
       ~MOB"""
       <Row gap={10} fill_width={true}>

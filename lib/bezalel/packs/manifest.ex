@@ -10,7 +10,10 @@ defmodule Bezalel.Packs.Manifest do
   nothing else from the manifest reaches a path.
   """
 
-  @known ~w(core notes lxx ancient graph)
+  # The translations pack holds the NET Bible (bezalel_core's
+  # `Bezalel.Study.Translations`), the default English: optional like the
+  # packs after it, listed next to core.
+  @known ~w(core translations notes lxx ancient graph)
 
   @type entry :: %{
           name: String.t(),

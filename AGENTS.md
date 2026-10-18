@@ -334,7 +334,7 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   in the session) are downscaled on the phone and cached
   (`Bezalel.Images`, `Bezalel.Views.Images`, with a full-screen viewer).
   Preferences: `Bezalel.Settings`
-  (`Mob.State`). Scripture and lexicon: `Bezalel.Scripture` (Exodus 31
+  (`Mob.State`; the study preferences too, below). Scripture and lexicon: `Bezalel.Scripture` (Exodus 31
   sample). Models: `Bezalel.Models` (rho's catalog for the providers the
   user has access to; a model id is its req_llm spec). Sign-ins, API keys
   and token usage: `Bezalel.Account`, over rho.
@@ -343,7 +343,10 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   (`data/`), with the system prompt (`Bezalel.Study.Prompt`); the live agent
   runs them. They know nothing of Mob: the app names the packs directory
   through `config :bezalel_core, :packs_dir`
-  (`{Bezalel.Packs.Storage, :packs_dir, []}`). Their tests and the fixture
+  (`{Bezalel.Packs.Storage, :packs_dir, []}`) and the user's study
+  preferences through `config :bezalel_core, :preferences`
+  (`{Bezalel.Settings, :study_preferences, []}`, called with the tool's
+  ctx appended). Their tests and the fixture
   packs (cut here by `data/scripts/make_fixtures.py`, written into
   `../bezalel_core`) are bezalel_core's; this app's tests read the fixtures
   from the dependency (`test/test_helper.exs`). `Bezalel.App.load_core/0`
@@ -395,7 +398,36 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   Settings and Study say so. Tests drive Live with a scripted model
   (`test/support/fake_llm.ex`, `test/bezalel/live_agent_test.exs`). Study's
   loop takes rho's registry (the study tools, plus the tools built in the
-  Workshop) and withholds the `dyn_*` tools.
+  Workshop) and withholds the `dyn_*` tools and the study tools whose every
+  source the user switched off (Settings → Study, below).
+- **Settings → Study** (`Bezalel.Views.Settings`; decisions/2026-10-17-study-preferences.md):
+  the user's `Bezalel.Study.Preferences`, kept in `Mob.State` under
+  `:bezalel_study_preferences` as a plain map (`Bezalel.Settings.study_preferences/0,1`,
+  `put_study_preferences/1`, `update_study_preferences/1`, normalised by
+  `Preferences.new/1`). On the tab: Translation (NET, the default, or BSB;
+  the NET needs the translations pack, "NET Bible" in the study library and
+  in `Bezalel.Packs.Manifest.known/0`, optional,
+  and without it the tools quote the BSB and say so), Results per list
+  (4 / 8 / 12 / 20), Scripture labels (Show / Hide), and two rows opening
+  pushed screens, both pushed with `%{app: self()}` and telling the app's
+  screen `{:study_preferences, :changed}` when they store a change:
+  `Bezalel.ApproachScreen` (the editable approach in a multi-line field,
+  Save / Restore default, the fixed part shown read-only under "Always
+  included") and `Bezalel.StudySourcesScreen` (bezalel_core's
+  `Bezalel.Study.Sources` by group, each On/Off). A change applies from
+  the next question: `Bezalel.Views.Helpers.release_idle/1` releases the
+  idle loops, the open conversation's too, and marks a streaming one
+  stale (it goes when its reply ends). `Bezalel.Agent.Live` builds each
+  loop's prompt with `Prompt.system_prompt(prefs, surface: …)`, the
+  surface being the phone's formatting section, which lives in the app
+  (`Live.phone_formatting/0`; core has no platform formatting), and
+  withholds `Bezalel.Study.Tools.withheld(prefs)` beside the `dyn_*`
+  tools. The passage card labels the translation the tool quoted
+  (`result.translation`) and, for the NET, ends its last verse with
+  "(NET)" linked to netbible.org, as its terms ask.
+  Tests: `test/bezalel/settings_test.exs` ("study"),
+  `test/bezalel/live_agent_test.exs` ("study preferences"); a test that
+  mounts the app clears `:bezalel_study_preferences` in its setup.
 - **The Workshop** (`Bezalel.Workshop`, decisions/2026-10-15-workshop-on-dyn.md)
   builds tools through rho's Dyn layer (`config :rho, :dyn`): with a model,
   a rho loop (`Bezalel.Workshop.Builder`, prompt `Bezalel.Workshop.Prompt`)

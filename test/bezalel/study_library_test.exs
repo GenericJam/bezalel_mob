@@ -18,6 +18,7 @@ defmodule Bezalel.StudyLibraryTest do
     # No API key left by another module: Settings' key rows have their own
     # "Remove" buttons.
     MemoryStore.clear()
+    Mob.State.delete(:bezalel_study_preferences)
 
     # This test's library replaces the last one's.
     :ok = Packs.subscribe()
@@ -29,12 +30,13 @@ defmodule Bezalel.StudyLibraryTest do
       Application.put_env(:bezalel, :packs_manifest_url, "http://127.0.0.1:9/packs/manifest.json")
       Application.delete_env(:bezalel, :test_network)
       Bezalel.Settings.put_packs_offered()
-      for name <- ["core", "notes"], do: Packs.cancel(name)
+      Mob.State.delete(:bezalel_study_preferences)
+      for name <- ["core", "notes", "translations"], do: Packs.cancel(name)
       File.rm_rf!(dir)
       File.mkdir_p!(dir)
     end)
 
-    %{core: core, notes: notes, server: server}
+    %{core: core, notes: notes, server: server, base: base}
   end
 
   defp flush do
@@ -138,6 +140,18 @@ defmodule Bezalel.StudyLibraryTest do
     assert text =~ "Dead Sea Scrolls transcription by Martin G. Abegg Jr."
     assert text =~ "Summaries of John Owen's works"
     assert text =~ "Permission is hereby granted, free of charge"
+
+    # The NET, quoted by permission: its acknowledgement verbatim, the
+    # licence note and its link.
+    assert text =~
+             "Scripture quoted by permission. Quotations designated (NET) are from the NET Bible® copyright ©1996, 2019 by Biblical Studies Press, L.L.C. http://netbible.com All rights reserved."
+
+    assert text =~ "Free non-commercial use by permission (netbible.com/copyright)."
+    assert text =~ "The NET's translators' notes are not included."
+
+    assert %{props: %{on_tap: {_, {:open, "http://netbible.org"}}}} =
+             find(view, :text, text: "http://netbible.org")
+
     assert_renderable(view)
 
     render_info(
@@ -150,5 +164,49 @@ defmodule Bezalel.StudyLibraryTest do
 
     assert %{props: %{on_tap: {_, {:open, "https://creativecommons.org/licenses/by-nc/4.0/"}}}} =
              find(view, :text, text: "CC BY-NC 4.0")
+  end
+
+  test "with the NET chosen and its pack not on the phone, the study library says the tools quote the BSB" do
+    view = settings()
+    assert text(view) =~ "Your translation, the NET Bible, needs the NET Bible pack."
+    assert StudyLibrary.title("translations") == "NET Bible"
+
+    view = render_info(view, {:tap, {:settings, {:translation, "bsb"}}})
+    refute text(view) =~ "needs the NET Bible pack"
+  end
+
+  test "a library with the translations pack lists it as the NET Bible, optional: download, then remove",
+       ctx do
+    translations = PackServer.pack("translations", "v2")
+
+    PackServer.publish(ctx.server, ctx.base, 2, [
+      {"core", ctx.core, true},
+      {"translations", translations, false},
+      {"notes", ctx.notes, false}
+    ])
+
+    :ok = Packs.check()
+    assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 2."}}, 5_000
+    flush()
+
+    view = settings()
+    assert Enum.map(assigns(view).packs.packs, & &1.name) == ["core", "translations", "notes"]
+    assert %{required: false} = Enum.find(assigns(view).packs.packs, &(&1.name == "translations"))
+    text = text(view)
+    assert text =~ "NET Bible"
+    refute text =~ "NET Bible · needed"
+    assert text =~ "Your translation, the NET Bible, needs the NET Bible pack."
+    assert pack_button?(view, {:download, "translations"})
+
+    view = render_info(view, {:tap, {:packs, {:download, "translations"}}})
+    view = follow(view, notice("The translations pack is ready."))
+    assert pack_button?(view, {:remove, "translations"})
+    refute text(view) =~ "needs the NET Bible pack"
+    assert text(view) =~ "NET Bible, from its pack on this phone."
+
+    view = render_info(view, {:tap, {:packs, {:remove, "translations"}}})
+    assert assigns(view).toast.text == "Removed the NET Bible pack."
+    assert pack_button?(view, {:download, "translations"})
+    assert text(view) =~ "needs the NET Bible pack"
   end
 end

@@ -2,7 +2,9 @@ defmodule Bezalel.SettingsTest do
   use Mob.ScreenCase
   @moduletag :screen
 
-  alias Bezalel.AppScreen
+  alias Bezalel.Agent.Live
+  alias Bezalel.{ApproachScreen, AppScreen, AttributionsScreen, Settings, StudySourcesScreen}
+  alias Bezalel.Study.{Preferences, Prompt, Sources}
   alias Bezalel.Test.{Browser, MemoryStore}
 
   @openai_key "sk-proj-abcdefghijklmnop1234WXYZ"
@@ -10,8 +12,17 @@ defmodule Bezalel.SettingsTest do
   setup do
     MemoryStore.clear()
     Mob.State.delete(:bezalel_model)
+    Mob.State.delete(:bezalel_study_preferences)
     File.rm(Path.join(Rho.Config.data_dir(), "usage.json"))
+    on_exit(fn -> Mob.State.delete(:bezalel_study_preferences) end)
     :ok
+  end
+
+  # Whether the segment (or pill) tapping `tag` is the selected one.
+  defp selected?(view, tag) do
+    view
+    |> find_all(:box)
+    |> Enum.any?(&match?(%{props: %{on_tap: {_, ^tag}, background: :secondary}}, &1))
   end
 
   defp settings, do: AppScreen |> mount_screen() |> render_info({:tap, {:tab, :settings}})
@@ -197,6 +208,165 @@ defmodule Bezalel.SettingsTest do
       [_, usage] = String.split(t, "TOKEN USAGE")
       refute usage =~ "Sonnet"
       assert_renderable(view)
+    end
+  end
+
+  describe "study" do
+    test "translation, results per list and scripture labels: the defaults, then each persists across a re-mount" do
+      view = settings()
+      assert assigns(view).study == %Preferences{}
+      assert selected?(view, {:settings, {:translation, "net"}})
+      assert selected?(view, {:settings, {:limit, 8}})
+      assert selected?(view, {:settings, {:labels, true}})
+      assert text(view) =~ "The NET Bible comes in its own pack"
+      assert_renderable(view)
+
+      view =
+        view
+        |> render_info({:tap, {:settings, {:translation, "bsb"}}})
+        |> render_info({:tap, {:settings, {:limit, 12}}})
+        |> render_info({:tap, {:settings, {:labels, false}}})
+
+      assert %{translation: "bsb", limit: 12, scripture_labels: false} = assigns(view).study
+      assert text(view) =~ "Berean Standard Bible, from the core pack."
+
+      again = settings()
+      assert %{translation: "bsb", limit: 12, scripture_labels: false} = assigns(again).study
+      assert selected?(again, {:settings, {:translation, "bsb"}})
+      refute selected?(again, {:settings, {:translation, "net"}})
+      assert selected?(again, {:settings, {:limit, 12}})
+      assert selected?(again, {:settings, {:labels, false}})
+
+      # What the study tools read (config :bezalel_core, :preferences),
+      # whatever the session.
+      assert %{translation: "bsb", limit: 12, scripture_labels: false} =
+               Preferences.current(%{session_id: "any"})
+
+      # Stored as a plain map.
+      assert %{translation: "bsb", excluded_sources: excluded} =
+               Mob.State.get(:bezalel_study_preferences)
+
+      assert Enum.sort(excluded) == Enum.sort(Sources.default_excluded())
+    end
+
+    test "the NET's acknowledgement is a tap away" do
+      view = settings()
+
+      assert %{props: %{on_tap: {_, {:packs, :attributions}}}} =
+               find(view, :text,
+                 text: "The NET Bible® is quoted by permission: see Sources and licences"
+               )
+
+      view = render_info(view, {:tap, {:packs, :attributions}})
+      assert navigated_to(view) == AttributionsScreen
+    end
+
+    test "the approach: your own saved and kept, a toast that it applies from the next question, the fixed part shown; Restore default clears it" do
+      view = settings()
+      assert text(view) =~ "The default: what the texts say, credited"
+      assert navigated_to(render_info(view, {:tap, {:settings, :approach}})) == ApproachScreen
+
+      screen = mount_screen(ApproachScreen, %{app: self()})
+      assert assigns(screen).draft == Prompt.default_approach()
+      assert %{props: %{lines: lines}} = find(screen, :text_field)
+      assert lines > 1
+      t = text(screen)
+      assert t =~ "ALWAYS INCLUDED"
+      assert t =~ "## Ground rules"
+      assert t =~ "## Formatting for a phone"
+      assert t =~ Live.phone_formatting() |> String.split("\n") |> Enum.at(2)
+      assert_renderable(screen)
+
+      mine = "Answer as a historian of religion would, briefly."
+
+      screen =
+        screen
+        |> render_info({:change, :approach, mine})
+        |> render_info({:tap, :save})
+
+      assert Settings.study_preferences().approach == mine
+      assert assigns(screen).toast.text == "Saved. It applies from your next question."
+      assert text(screen) =~ "Saved. It applies from your next question."
+      assert_receive {:study_preferences, :changed}
+
+      again = mount_screen(ApproachScreen, %{app: self()})
+      assert assigns(again).draft == mine
+      assert text(again) =~ "YOUR OWN APPROACH."
+
+      # The app's screen follows (and says so on its row).
+      view = render_info(view, {:study_preferences, :changed})
+      assert assigns(view).study.approach == mine
+      assert text(view) =~ "Your own"
+
+      again = render_info(again, {:tap, :restore})
+      assert Settings.study_preferences().approach == nil
+      assert assigns(again).draft == Prompt.default_approach()
+      assert assigns(again).toast.text =~ "Restored the default."
+      assert_receive {:study_preferences, :changed}
+
+      # Saving the default as it is keeps the default (nil).
+      again = render_info(again, {:tap, :save})
+      assert Settings.study_preferences().approach == nil
+      assert_receive {:study_preferences, :changed}
+
+      # Saving a blank field restores the default, and says so.
+      Settings.update_study_preferences(&%{&1 | approach: mine})
+
+      again =
+        again
+        |> render_info({:change, :approach, "  \n "})
+        |> render_info({:tap, :save})
+
+      assert Settings.study_preferences().approach == nil
+      assert assigns(again).draft == Prompt.default_approach()
+
+      assert assigns(again).toast.text ==
+               "Restored the default. It applies from your next question."
+    end
+
+    test "the sources: grouped, each with its description and On/Off; editorial verdicts and genre guidance off by default; a switch persists" do
+      view = settings()
+      total = length(Sources.all())
+      off = Enum.count(Sources.default_excluded())
+      assert off == 2
+      assert text(view) =~ "#{total - off} of #{total} on"
+      assert navigated_to(render_info(view, {:tap, {:settings, :sources}})) == StudySourcesScreen
+
+      screen = mount_screen(StudySourcesScreen, %{app: self()})
+      t = text(screen)
+      assert t =~ "may still know it from its training"
+
+      for source <- Sources.all() do
+        assert String.contains?(t, source.label)
+        assert String.contains?(t, source.description)
+        assert String.contains?(t, String.upcase(source.group))
+      end
+
+      assert selected?(screen, {:source, "editorial:verdicts", false})
+      assert selected?(screen, {:source, "notes:dictionary", true})
+      assert_renderable(screen)
+
+      screen = render_info(screen, {:tap, {:source, "notes:dictionary", false}})
+      assert_receive {:study_preferences, :changed}
+      assert selected?(screen, {:source, "notes:dictionary", false})
+      assert MapSet.member?(Settings.study_preferences().excluded_sources, "notes:dictionary")
+
+      screen = render_info(screen, {:tap, {:source, "editorial:verdicts", true}})
+      assert_receive {:study_preferences, :changed}
+
+      again = mount_screen(StudySourcesScreen, %{app: self()})
+      assert selected?(again, {:source, "notes:dictionary", false})
+      assert selected?(again, {:source, "editorial:verdicts", true})
+
+      assert Settings.study_preferences().excluded_sources ==
+               MapSet.new(["notes:dictionary", "method:genre_guidance"])
+
+      # Tapping what's already selected changes nothing and tells no one.
+      render_info(screen, {:tap, {:source, "editorial:verdicts", true}})
+      refute_received {:study_preferences, :changed}
+
+      view = render_info(view, {:study_preferences, :changed})
+      assert text(view) =~ "#{total - 2} of #{total} on"
     end
   end
 end

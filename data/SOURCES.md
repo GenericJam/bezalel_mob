@@ -24,7 +24,8 @@ of them shipped.
 | STEPBible TEGMC, TEHMC | Morphology codes (`morphology` → core) | same | CC BY 4.0 |
 | Brown-Driver-Briggs, unabridged (1906), formatted by Eliran Wong | Hebrew lexicon (`lexicon` → core) | github.com/eliranwong/unabridged-BDB-Hebrew-lexicon @ `6e8326c6` | Public domain |
 | G. Abbott-Smith, *A Manual Greek Lexicon of the NT* (1922), TEI by translatable-exegetical-tools | Greek lexicon enrichment (`lexicon` → core) | github.com/translatable-exegetical-tools/Abbott-Smith @ `4048093c` | Public domain |
-| Berean Standard Bible | **The English text `lookup_verse` shows** (`bsb_verses` → core); also the text the similar-passage vectors are computed from | bereanbible.com/bsb.txt (sha256 pinned in studybible-mcp `parsers/bsb.py`) | Public domain (dedicated by the publisher) |
+| Berean Standard Bible | **The English the tools quote** when the user chooses the BSB, or when the NET's pack isn't on the phone (`bsb_verses` → core); also the text the similar-passage vectors are computed from | bereanbible.com/bsb.txt (sha256 pinned in studybible-mcp `parsers/bsb.py`) | Public domain (dedicated by the publisher) |
+| NET Bible® (Biblical Studies Press, 2019 text) | **The English the tools quote by default** (`translations`, `translation_verses` → translations; built by bezalel_core's `data/`, `mix bezalel.data.net`). The verse text only: none of the NET's translators' notes | labs.bible.org/api (formatting=full, one request per book, each response sha256-pinned in bezalel_core `data/pins.json`) | **Free non-commercial use by permission** (netbible.com/copyright): "(NET)" after each quotation, NET linked to http://netbible.org, text unaltered, acknowledgement shown |
 | OpenBible.info cross references (Treasury of Scripture Knowledge plus votes) | `cross_references` → core (`type = 'tsk'`) | a.openbible.info/data/cross-references.zip, file dated 2026-10-12, vendored as `vendor/openbible-cross-references-2026-10-12.txt.zst` (the published file is regenerated in place) | CC BY 4.0 |
 | ACAI Biblical Entity Data (BiblioNexus, via BibleAquifer) | People, places, groups, key terms (`acai_entities` → core) | github.com/BibleAquifer/ACAI @ `7e6a2d66` | CC BY-SA 4.0 |
 | Torah Weave, Moshe Kline | Literary units of the Torah (`torah_weave_units`, `torah_weave_cells` → core) | `data/torah_weave/torah-units.json` in studybible-mcp (from chaver.com) | CC BY 4.0 |
@@ -188,28 +189,34 @@ Strings to use verbatim:
     Study Bible MCP Contributors, MIT License." The MIT notice must accompany
     copies of substantial portions: include the full MIT licence text from the
     studybible-mcp `LICENSE` file on the attributions screen.
+24. **NET Bible** — "Scripture quoted by permission. Quotations designated (NET)
+    are from the NET Bible® copyright ©1996, 2019 by Biblical Studies Press,
+    L.L.C. http://netbible.com All rights reserved." (verbatim, as bezalel_core's
+    `Translations.get("net").copyright`). Licence line: "Free non-commercial use
+    by permission (netbible.com/copyright). The NET's translators' notes are not
+    included." Link: http://netbible.org
 
 Under a heading such as "Summaries of scholarship", the screen also credits the
 authors whose work studybible-mcp summarises (no licence applies; these are
 credits, and the summaries are studybible-mcp's own words):
 
-24. **Michael S. Heiser** — "Summaries of, and textual-variant analysis from, the
+25. **Michael S. Heiser** — "Summaries of, and textual-variant analysis from, the
     published work of Michael S. Heiser, including 'Deuteronomy 32:8 and the Sons
     of God' (Bibliotheca Sacra, 2001), 'Monotheism, Polytheism, Monolatry, or
     Henotheism?' (Bulletin for Biblical Research, 2008), his articles in the
     Faithlife Study Bible and the Lexham Bible Dictionary, and the Naked Bible
     Podcast." Link: https://drmsh.com
-25. **John Stott** — "Summaries of John Stott's The Cross of Christ, Basic
+26. **John Stott** — "Summaries of John Stott's The Cross of Christ, Basic
     Christianity, and The Message of Romans, Galatians, Ephesians, Acts and the
     Sermon on the Mount (The Bible Speaks Today), and Baptism and Fullness."
-26. **John Lennox** — "Summaries of John Lennox's Seven Days That Divide the World,
+27. **John Lennox** — "Summaries of John Lennox's Seven Days That Divide the World,
     Against the Flow, Joseph, and Determined to Believe?"
-27. **Bradley** — "Summary of Bradley, 'Two Fathers Only: Rival Pater Familias and
+28. **Bradley** — "Summary of Bradley, 'Two Fathers Only: Rival Pater Familias and
     the Organizing Binary of Scripture'."
-28. **Andrew Remington Rillera** — "Ancient Near East context entries summarising
+29. **Andrew Remington Rillera** — "Ancient Near East context entries summarising
     Andrew Remington Rillera, Lamb of the Free (Cascade Books, 2024), and the work
     of Jacob Milgrom on which it builds."
-29. **John Owen** — "Summaries of John Owen's works (public domain), linking the
+30. **John Owen** — "Summaries of John Owen's works (public domain), linking the
     texts at the Christian Classics Ethereal Library." Link: https://ccel.org/ccel/owen
 
 ## Obligations that follow
@@ -217,6 +224,13 @@ credits, and the summaries are studybible-mcp's own words):
 - **Non-commercial (CC BY-NC):** the Dead Sea Scrolls and the Metsudah English are
   in the ancient pack. Bezalel is free with no ads (Decisions, 3); if that ever
   changed, those two would have to come out of the ancient pack first.
+- **NET Bible (permission, non-commercial):** quoted under the publisher's
+  permission for free non-commercial use (netbible.com/copyright). Every quotation
+  is followed by "(NET)", in software on the internet with "NET" linked to
+  http://netbible.org (the tools label it so, the passage card links it); the text
+  is not altered; the acknowledgement above is shown on the attributions screen.
+  The translators' notes are not licensed and are not in the pack. As with BY-NC,
+  if Bezalel ever charged or carried ads, the NET would have to come out first.
 - **ShareAlike (CC BY-SA):** our adapted versions (the pack tables holding ACAI,
   Aquifer, Theographic, Josephus, Philo and the Latin 4 Ezra) must be offered under
   CC BY-SA 4.0. Each pack file is a collection of separately licensed tables and

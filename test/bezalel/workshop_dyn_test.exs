@@ -20,7 +20,10 @@ defmodule Bezalel.WorkshopDynTest do
 
   setup %{tmp_dir: dir} do
     for schema <- [Tool, Conversation], do: Repo.delete_all(schema)
-    for key <- [:bezalel_conversation, :bezalel_mode, :bezalel_model], do: Mob.State.delete(key)
+
+    for key <- [:bezalel_conversation, :bezalel_mode, :bezalel_model, :bezalel_study_preferences],
+        do: Mob.State.delete(key)
+
     MemoryStore.clear()
     :ok = Rho.Auth.put_api_key(:anthropic, "sk-ant-api03-test-key-0123456789")
     :ok = Dyn.fresh(Path.join(dir, "dyn"))

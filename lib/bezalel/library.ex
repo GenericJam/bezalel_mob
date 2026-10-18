@@ -580,13 +580,13 @@ defmodule Bezalel.Library do
     {:ok, c} =
       create_conversation(%{
         name: "Exodus 31 · Bezalel",
-        kicker: "SERMON PREP · EXODUS 31",
-        kind: "Sermon prep"
+        kicker: "STUDY · EXODUS 31",
+        kind: "Study"
       })
 
     {:ok, _} =
       append(c, [
-        Transcript.user("Help me prepare a sermon on Bezalel — what’s the heart of it?"),
+        Transcript.user("Help me study Bezalel — what’s the heart of the passage?"),
         Transcript.reply(%{
           model: "storyboard",
           passage: "exodus-31-2-3",

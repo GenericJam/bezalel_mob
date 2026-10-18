@@ -59,6 +59,7 @@ defmodule Bezalel.AppScreen do
         mode: mode,
         cover: Settings.cover(),
         model_id: Settings.model(),
+        study: Settings.study_preferences(),
         account: Account.status(),
         usage: Account.usage(),
         login: login,
@@ -145,13 +146,11 @@ defmodule Bezalel.AppScreen do
   defp active_index(:tool), do: 2
   defp active_index(tab), do: Enum.find_index(@tabs, fn {key, _, _} -> key == tab end)
 
-  # Sits above the composer in Study, above the tab bar elsewhere; on iOS the
-  # root runs under the home indicator, so that inset is added there.
+  # Sits above the composer in Study, above the tab bar elsewhere.
   defp toast(nil, _tab, _inset), do: []
 
   defp toast(toast, tab, inset) do
     bottom = if tab == :study, do: 150, else: 78
-    ios = %{padding_bottom: bottom + inset}
     o = Palette.overlay()
 
     # A deleted conversation's Undo is the shelf's; the rest are Study's.
@@ -173,30 +172,7 @@ defmodule Bezalel.AppScreen do
 />)
       end
 
-    ~MOB"""
-    <Box padding_left={16} padding_right={16} padding_bottom={bottom} ios={ios} fill_width={true}>
-      <Box
-        background={o.popover}
-        corner_radius={16}
-        padding_left={16}
-        padding_right={16}
-        padding_top={12}
-        padding_bottom={12}
-        fill_width={true}
-      >
-        <Row gap={12} align={:center} fill_width={true}>
-          <Text
-            text={toast.text}
-            font={:ui_medium}
-            text_size={13}
-            text_color={o.on_popover}
-            weight={1}
-          />
-          {actions}
-        </Row>
-      </Box>
-    </Box>
-    """
+    Helpers.toast_box(toast.text, actions, bottom, inset)
   end
 
   # ── Events ────────────────────────────────────────────────────────────────
@@ -239,6 +215,10 @@ defmodule Bezalel.AppScreen do
 
   def handle_info({:change, {:settings, field}, value}, socket),
     do: {:noreply, SettingsView.change(field, value, socket)}
+
+  # The approach or sources screen (pushed from Settings) stored a change.
+  def handle_info({:study_preferences, :changed}, socket),
+    do: {:noreply, SettingsView.study_changed(socket)}
 
   def handle_info({:rho_auth, :changed}, socket), do: {:noreply, SettingsView.refresh(socket)}
 

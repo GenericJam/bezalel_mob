@@ -1,16 +1,23 @@
 defmodule Bezalel.Views.Settings do
   @moduledoc """
-  The Settings tab: account, appearance, model, the study library
-  (`Bezalel.Views.StudyLibrary`), usage, what's on the phone.
+  The Settings tab: account, appearance, model, study (translation,
+  results per list, scripture labels, and the approach and sources
+  screens, `Bezalel.ApproachScreen` and `Bezalel.StudySourcesScreen`), the
+  study library (`Bezalel.Views.StudyLibrary`), usage, what's on the
+  phone.
   """
   import Mob.Sigil
 
   alias Bezalel.{Account, Agent, Models, Settings}
+  alias Bezalel.Study.{Sources, Translations}
   alias Bezalel.Views.{Helpers, StudyLibrary}
   alias Mob.Socket
   alias MobBezalel.{Palette, UI}
   alias Rho.Auth
   alias Rho.Auth.Login
+
+  # Results per list: a few choices around the default (8).
+  @limits [4, 8, 12, 20]
 
   @doc "The Settings body."
   def render(assigns) do
@@ -62,6 +69,7 @@ defmodule Bezalel.Views.Settings do
       section("Account", account(assigns)),
       section("Appearance", [appearance]),
       section("Model", [model_row(model, assigns.account, models_tap), note(model_note)]),
+      section("Study", study(assigns)),
       section("Study library", StudyLibrary.render(assigns)),
       section("Token usage", [usage]),
       section("On this phone", [on_phone]),
@@ -102,6 +110,106 @@ defmodule Bezalel.Views.Settings do
       {UI.kicker(title)}
       {children}
     </Column>
+    """
+  end
+
+  # The study preferences (`Bezalel.Study.Preferences`): the choices in a
+  # card, then the approach and the sources, each on a screen of its own.
+  defp study(assigns) do
+    prefs = assigns.study
+    translations = Translations.all()
+
+    translation_opts =
+      for t <- translations, do: {t.abbreviation, {self(), {:settings, {:translation, t.key}}}}
+
+    limit_opts = for n <- @limits, do: {"#{n}", {self(), {:settings, {:limit, n}}}}
+
+    label_opts = [
+      {"Show", {self(), {:settings, {:labels, true}}}},
+      {"Hide", {self(), {:settings, {:labels, false}}}}
+    ]
+
+    licence = {self(), {:packs, :attributions}}
+
+    choices =
+      UI.card(
+        [
+          field("Translation"),
+          UI.segmented(translation_opts, index(translations, &(&1.key == prefs.translation))),
+          note(translation_note(prefs.translation, assigns.packs)),
+          ~MOB(<Text
+  text="The NET Bible® is quoted by permission: see Sources and licences"
+  font={:ui_medium}
+  text_size={12}
+  text_color={:secondary}
+  on_tap={licence}
+/>),
+          field("Results per list"),
+          UI.segmented(limit_opts, index(@limits, &(&1 == prefs.limit))),
+          note(
+            "How many results a list (cross references, names, verses) gives when Bezalel doesn't ask for a number."
+          ),
+          field("Scripture labels"),
+          UI.segmented(label_opts, if(prefs.scripture_labels, do: 0, else: 1)),
+          note(
+            "Whether ancient sources are labelled with their place in the canon, by tradition where traditions differ."
+          )
+        ],
+        padding: 16,
+        gap: 10
+      )
+
+    approach_note =
+      if prefs.approach, do: "Your own", else: "The default: what the texts say, credited"
+
+    on = Enum.count(Sources.all(), &Sources.enabled?(prefs, &1.key))
+    sources_note = "#{on} of #{length(Sources.all())} on"
+
+    [
+      choices,
+      nav_row("Approach", approach_note, {self(), {:settings, :approach}}),
+      nav_row("Sources", sources_note, {self(), {:settings, :sources}}),
+      note("Changes apply from your next question.")
+    ]
+  end
+
+  defp field(text),
+    do: ~MOB(<Text text={text} font={:ui_medium} text_size={14} text_color={:on_surface} />)
+
+  defp index(list, fun), do: Enum.find_index(list, fun)
+
+  defp translation_note("net", packs) do
+    if Enum.any?(packs.packs, &(&1.name == "translations" and &1.installed != nil)),
+      do: "NET Bible, from its pack on this phone.",
+      else:
+        "The NET Bible comes in its own pack (Study library). Until it's on this phone, the tools quote the BSB and say so."
+  end
+
+  defp translation_note(_bsb, _packs), do: "Berean Standard Bible, from the core pack."
+
+  # A row opening a screen: its title, what it's set to, and an Edit cue.
+  defp nav_row(title, value, tap) do
+    ~MOB"""
+    <Box
+      background={:surface}
+      border_color={:border}
+      border_width={1}
+      corner_radius={18}
+      padding_left={16}
+      padding_right={16}
+      padding_top={10}
+      padding_bottom={10}
+      fill_width={true}
+      on_tap={tap}
+    >
+      <Row gap={12} align={:center} fill_width={true}>
+        <Column gap={2} weight={1}>
+          <Text text={title} font={:ui_medium} text_size={15} text_color={:on_surface} />
+          <Text text={value} text_size={12} text_color={:muted} />
+        </Column>
+        <Text text="Edit" font={:ui_medium} text_size={13} text_color={:secondary} />
+      </Row>
+    </Box>
     """
   end
 
@@ -478,6 +586,36 @@ defmodule Bezalel.Views.Settings do
 
   def handle(:gallery, socket),
     do: {:noreply, Socket.push_screen(socket, Bezalel.DesignGalleryScreen)}
+
+  def handle({:translation, key}, socket), do: {:noreply, put_study(socket, translation: key)}
+  def handle({:limit, n}, socket), do: {:noreply, put_study(socket, limit: n)}
+  def handle({:labels, show?}, socket), do: {:noreply, put_study(socket, scripture_labels: show?)}
+
+  # The screens tell this one (`study_changed/1`) when they store a change.
+  def handle(:approach, socket),
+    do: {:noreply, Socket.push_screen(socket, Bezalel.ApproachScreen, %{app: self()})}
+
+  def handle(:sources, socket),
+    do: {:noreply, Socket.push_screen(socket, Bezalel.StudySourcesScreen, %{app: self()})}
+
+  @doc """
+  The study preferences changed (here, or on the approach or sources
+  screen): Settings shows them, and the agent's idle loops go so the next
+  question follows them (`Bezalel.Views.Helpers.release_idle/1`).
+  """
+  def study_changed(socket) do
+    socket
+    |> Socket.assign(:study, Settings.study_preferences())
+    |> Helpers.release_idle()
+  end
+
+  defp put_study(socket, changes) do
+    before = socket.assigns.study
+
+    if Settings.update_study_preferences(&struct(&1, changes)) == before,
+      do: socket,
+      else: study_changed(socket)
+  end
 
   @doc "Handles typing in a Settings field: an API key, or Claude's sign-in code."
   def change({:key, provider}, value, socket),

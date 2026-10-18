@@ -14,6 +14,11 @@ config :mob, :repo, Bezalel.Repo
 # (on Android the app-support directory needs the activity).
 config :bezalel_core, :packs_dir, {Bezalel.Packs.Storage, :packs_dir, []}
 
+# The user's study preferences (approach, sources, translation, ...), which
+# the study tools and the system prompt follow: Settings → Study, kept in
+# Mob.State (Bezalel.Settings).
+config :bezalel_core, :preferences, {Bezalel.Settings, :study_preferences, []}
+
 # rho, the agent core (models, sign-in, usage). It keeps its files in the
 # app's data dir and the sign-ins and API keys in the platform's secure store.
 config :rho,

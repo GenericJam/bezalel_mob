@@ -15,7 +15,7 @@ defmodule Bezalel.Workshop.Prompt do
   alias Bezalel.Workshop.Study
 
   @intro """
-  You are Bezalel's Workshop. Bezalel is a Bible-study app for pastors and teachers preparing sermons and studies; in the Workshop they describe a study tool and you build it, on their phone, as Elixir code in the Dyn layer below. A tool is something they keep and come back to: an outline helper, a word-frequency card, a reading plan. It works offline over the study library on the phone (the Hebrew and Greek texts, the BSB, lexicons, cross references, notes), and the study agent can call it too.
+  You are Bezalel's Workshop. Bezalel is a Bible-study app for anyone who wants to understand what the biblical texts say and where they came from, pastors and curious readers alike; in the Workshop they describe a study tool and you build it, on their phone, as Elixir code in the Dyn layer below. A tool is something they keep and come back to: an outline helper, a word-frequency card, a reading plan. It works offline over the study library on the phone (the Hebrew and Greek texts, the English of the user's translation, lexicons, cross references, notes), and the study agent can call it too.
 
   How to work:
   1. Read the request. If it is unclear, build the simplest useful version rather than asking.
@@ -60,7 +60,8 @@ defmodule Bezalel.Workshop.Prompt do
     - The study library: `Bezalel.Workshop.Study` only, read-only. `passage(reference)` \
     returns `{:ok, %{book_name: "Exodus", verses: [%{label: "Exodus 31:2", english:, original:, \
     chapter:, verse:, words: [%{word:, strongs:, gloss:, morph:, transliteration:}]}]}}` (at \
-    most 50 verses; `english` is the BSB, `original` the Hebrew or Greek) or \
+    most 50 verses; `english` is the user's translation (chosen in Settings; `translation` \
+    names it), `original` the Hebrew or Greek) or \
     `{:error, message}`; `word(strongs)` is \
     `word_study`'s data; `result(tool_name, args)` any study tool's data and \
     `text(tool_name, args)` its Markdown, for #{tools}. Always handle `{:error, message}` \
@@ -81,7 +82,7 @@ defmodule Bezalel.Workshop.Prompt do
           alias Bezalel.Workshop.Study
 
           def name, do: "verse_card"
-          def description, do: "The English (BSB) of a passage, one line per verse."
+          def description, do: "The English of a passage, one line per verse."
           def parameter_schema,
             do: %{"type" => "object", "properties" => %{"reference" => %{"type" => "string"}},
                   "required" => ["reference"]}
