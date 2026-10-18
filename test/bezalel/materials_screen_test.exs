@@ -392,7 +392,7 @@ defmodule Bezalel.MaterialsScreenTest do
       assert Enum.any?(assigns(view).messages, &(&1.text == "Hello"))
     end
 
-    test "something kept after the user moved on stays in Materials, not on the new question" do
+    test "something kept after the user moved on waits as a chip where they are now" do
       view =
         AppScreen
         |> mount_screen()
@@ -406,9 +406,56 @@ defmodule Bezalel.MaterialsScreenTest do
       view = view |> tap({:convs, {:open, other.id}}) |> render_async()
       assert assigns(view).conversation.id == other.id
 
+      assert [%{kind: :image, id: id}] = assigns(view).attachments
+      assert [%{id: ^id}] = MaterialStore.list()
+      assert assigns(view).toast == nil
+    end
+
+    test "chips stay in the composer across conversations and go with the question asked there" do
+      view = AppScreen |> mount_screen() |> take_photo()
+      [photo] = assigns(view).attachments
+
+      {:ok, other} = Library.create_conversation(%{name: "Other", kicker: "STUDY", kind: "Study"})
+      view = view |> render_info({:change, :draft, "Half"}) |> tap({:convs, {:open, other.id}})
+      assert assigns(view).attachments == [photo]
+      assert assigns(view).draft == ""
+
+      view = tap(view, {:convs, :new})
+      refute assigns(view).conversation.id == other.id
+      assert assigns(view).attachments == [photo]
+
+      view =
+        view
+        |> render_info({:change, :draft, "Look"})
+        |> tap({:study, :send})
+        |> render_async()
+
+      question = Enum.find(assigns(view).messages, &(&1.text == "Look"))
+      assert [%{id: id}] = question.materials
+      assert id == photo.id
       assert assigns(view).attachments == []
-      assert assigns(view).toast.text =~ "moved to another conversation"
-      assert [%{kind: :image}] = MaterialStore.list()
+      # It went with this conversation only, not the one open when it was added.
+      here = Library.get_conversation(assigns(view).conversation.id)
+      assert MaterialStore.sessions(photo.id) == [here.session_id]
+    end
+
+    test "a question the user moved away from before it went gives its chips back there" do
+      view = AppScreen |> mount_screen() |> take_photo()
+      [photo] = assigns(view).attachments
+      {:ok, other} = Library.create_conversation(%{name: "Other", kicker: "STUDY", kind: "Study"})
+
+      view =
+        view
+        |> render_info({:change, :draft, "First"})
+        |> tap({:study, :send})
+        |> tap({:convs, {:open, other.id}})
+        |> render_async()
+
+      assert assigns(view).conversation.id == other.id
+      assert assigns(view).attachments == [photo]
+      assert assigns(view).draft == ""
+      assert assigns(view).toast.text =~ "wasn't sent"
+      refute Enum.any?(assigns(view).messages, &(&1.text == "First"))
     end
 
     test "sending while a recording is transcribed waits for that transcript, not a second one" do
@@ -633,6 +680,51 @@ defmodule Bezalel.MaterialsScreenTest do
       assert assigns(view).mat_list == []
       assert assigns(view).attachments == []
       assert MaterialStore.fetch(photo.id, %{}) == :error
+    end
+
+    test "each card's × deletes it, after the same question, and its chip goes" do
+      view = AppScreen |> mount_screen() |> take_photo()
+      [photo] = assigns(view).attachments
+      view = tap(view, {:tab, :materials})
+
+      x = find(view, :box, id: "delete-material-" <> photo.id)
+      assert {_pid, {:materials, {:delete, id}}} = x.props.on_tap
+      assert id == photo.id
+
+      view = tap(view, {:materials, {:delete, id}})
+      assert assigns(view).sheet == {:delete_material, photo.id}
+      assert assigns(view).mat_open == nil
+
+      view = tap(view, {:materials, {:confirm_delete, photo.id}})
+      assert assigns(view).mat_list == []
+      assert assigns(view).attachments == []
+      assert MaterialStore.fetch(photo.id, %{}) == :error
+    end
+
+    test "deleting a video takes the chips of its stills with it" do
+      video_bytes = "not really a video"
+
+      {:ok, video} =
+        MaterialStore.put(Materials.new(video_bytes, name: "clip.mp4"), video_bytes, %{})
+
+      png = Png.solid(4, 4, {1, 1, 1})
+      still = Materials.derive(:still, video, png, meta: %{at_ms: 0})
+      {:ok, still} = MaterialStore.put(still, png, %{})
+
+      {:ok, leaf} =
+        MaterialStore.put(Materials.new(png <> "x", name: "leaf.png"), png <> "x", %{})
+
+      view =
+        AppScreen
+        |> mount_screen()
+        |> tap({:materials, {:ask, still.id}})
+        |> tap({:materials, {:ask, leaf.id}})
+        |> tap({:tab, :materials})
+        |> tap({:materials, {:delete, video.id}})
+        |> tap({:materials, {:confirm_delete, video.id}})
+
+      assert MaterialStore.fetch(still.id, %{}) == :error
+      assert Enum.map(assigns(view).attachments, & &1.id) == [leaf.id]
     end
 
     test "a drawing the agent made is kept, shown in its reply and listed" do

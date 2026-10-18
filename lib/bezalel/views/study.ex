@@ -773,9 +773,10 @@ defmodule Bezalel.Views.Study do
   `:again` (the last question asked anew, its materials sent again for the
   model chosen now). Ask or steer is decided again now: a reply may have
   started or ended while the materials were made ready. `cid` is the
-  conversation it was asked in: if the user has moved on meanwhile, it
-  isn't sent, and they're told (a question asked again keeps its Try
-  again there).
+  conversation it was asked in. A question asked again isn't sent if the
+  user has moved on meanwhile (it keeps its Try again there), and they're
+  told; a new question never gets here once they've moved on
+  (`Attach.prepared/2` gives its chips back).
   """
   def send_prepared(socket, mode, text, attachments, cid \\ nil) do
     %{id: open} = conversation = socket.assigns.conversation
@@ -783,12 +784,6 @@ defmodule Bezalel.Views.Study do
     cond do
       cid != nil and cid != open and mode == :again ->
         Helpers.toast(socket, "It wasn't asked again: you'd moved on. Try again from there.")
-
-      cid != nil and cid != open ->
-        Helpers.toast(
-          socket,
-          "That question wasn't sent: you'd moved on. Its materials are kept."
-        )
 
       mode == :again ->
         again(socket, attachments)
