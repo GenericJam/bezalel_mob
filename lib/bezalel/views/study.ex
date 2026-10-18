@@ -555,6 +555,10 @@ defmodule Bezalel.Views.Study do
     end
   end
 
+  # Something is still being added, recorded, dictated or made ready.
+  defp composer_busy?(a),
+    do: a.preparing != nil or a.keeping > 0 or a.recorder != nil or a.dictation != nil
+
   # ── Events ────────────────────────────────────────────────────────────────
 
   @doc """
@@ -574,7 +578,7 @@ defmodule Bezalel.Views.Study do
       text == "" and a.attachments == [] ->
         {:noreply, socket}
 
-      a.preparing != nil or a.keeping > 0 or a.recorder != nil ->
+      composer_busy?(a) ->
         {:noreply, socket}
 
       Reply.running?(a.streams[cid]) ->
@@ -1054,6 +1058,7 @@ defmodule Bezalel.Views.Study do
 
       conversation ->
         for text <- texts,
+            String.trim(text) != "",
             do: {:ok, _} = Library.add_message(conversation, %{role: :user, text: text})
 
         Helpers.refresh(socket)
@@ -1172,6 +1177,7 @@ defmodule Bezalel.Views.Study do
 
     with %Library.Conversation{} = conversation <- Library.get_conversation(cid) do
       for text <- pending,
+          String.trim(text) != "",
           do: {:ok, _} = Library.add_message(conversation, %{role: :user, text: text})
     end
 

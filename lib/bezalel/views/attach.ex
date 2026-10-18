@@ -71,7 +71,7 @@ defmodule Bezalel.Views.Attach do
       ],
       above: above(assigns),
       send_enabled:
-        not busy? and assigns.recorder == nil and
+        not busy? and assigns.recorder == nil and assigns.dictation == nil and
           (String.trim(assigns.draft) != "" or assigns.attachments != [])
     ]
   end
@@ -359,18 +359,20 @@ defmodule Bezalel.Views.Attach do
     end
   end
 
+  # Heard nothing: the next dictation uses Whisper (the mic doesn't reopen
+  # by itself).
+  def speech(:error, :no_speech, %{assigns: %{dictation: %{engine: :primary}}} = socket) do
+    socket
+    |> Socket.assign(dictation: nil, dictation_fallback: true)
+    |> Helpers.toast(
+      "Nothing came through. The next dictation uses Bezalel's own recogniser on the phone."
+    )
+  end
+
   # The platform's recogniser can't (no service, no language, no access):
   # Whisper takes over now, while the user is still talking.
   def speech(:error, reason, %{assigns: %{dictation: %{engine: :primary}}} = socket)
-      when reason in [
-             :unavailable,
-             :language,
-             :service_permission,
-             :client,
-             :server,
-             :network,
-             :no_speech
-           ] do
+      when reason in [:unavailable, :language, :service_permission, :client, :server, :network] do
     {engine, _} = engines()[:fallback]
 
     socket

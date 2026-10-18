@@ -93,7 +93,17 @@ defmodule Bezalel.MaterialStore do
   @spec cache_dir() :: Path.t()
   def cache_dir do
     Application.get_env(:bezalel, :materials_cache_dir) ||
-      Path.join(Mob.Storage.dir(:cache), "materials")
+      :persistent_term.get({__MODULE__, :cache_dir}, nil) ||
+      resolve_cache_dir()
+  end
+
+  # Resolved once per run: on Android the resolution needs the activity,
+  # which a model call made while the app is in the background may not have
+  # (as `Bezalel.Packs.Storage.root/0`).
+  defp resolve_cache_dir do
+    dir = Path.join(Mob.Storage.dir(:cache), "materials")
+    :persistent_term.put({__MODULE__, :cache_dir}, dir)
+    dir
   end
 
   @doc "A material's file on the phone."
