@@ -195,7 +195,7 @@ The manifest (`schema` 1):
   "built": "2026-10-15T19:30:00Z",
   "bezalel_commit": "<commit of the data/ that built the packs>",
   "studybible_mcp": {"repo": "https://github.com/djayatillake/studybible-mcp", "commit": "38cef28d…"},
-  "sources": "https://github.com/GenericJam/bezalel/blob/master/data/SOURCES.md",
+  "sources": "https://github.com/GenericJam/bezalel_mob/blob/master/data/SOURCES.md",
   "packs": [
     {
       "name": "core",

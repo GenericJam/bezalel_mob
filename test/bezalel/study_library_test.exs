@@ -142,10 +142,11 @@ defmodule Bezalel.StudyLibraryTest do
 
     render_info(
       view,
-      {:tap, {:open, "https://github.com/GenericJam/bezalel/blob/master/data/SOURCES.md"}}
+      {:tap, {:open, "https://github.com/GenericJam/bezalel_mob/blob/master/data/SOURCES.md"}}
     )
 
-    assert Browser.last() == "https://github.com/GenericJam/bezalel/blob/master/data/SOURCES.md"
+    assert Browser.last() ==
+             "https://github.com/GenericJam/bezalel_mob/blob/master/data/SOURCES.md"
 
     assert %{props: %{on_tap: {_, {:open, "https://creativecommons.org/licenses/by-nc/4.0/"}}}} =
              find(view, :text, text: "CC BY-NC 4.0")

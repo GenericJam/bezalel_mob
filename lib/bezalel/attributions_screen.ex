@@ -11,8 +11,8 @@ defmodule Bezalel.AttributionsScreen do
 
   alias MobBezalel.UI
 
-  @sources_md "https://github.com/GenericJam/bezalel/blob/master/data/SOURCES.md"
-  @readme_md "https://github.com/GenericJam/bezalel/blob/master/data/README.md"
+  @sources_md "https://github.com/GenericJam/bezalel_mob/blob/master/data/SOURCES.md"
+  @readme_md "https://github.com/GenericJam/bezalel_mob/blob/master/data/README.md"
   @manifest "https://bezalel.genericjam.com/packs/manifest.json"
 
   @by "https://creativecommons.org/licenses/by/4.0/"

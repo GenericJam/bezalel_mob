@@ -1,6 +1,7 @@
-# Bezalel — Agent Instructions
+# bezalel_mob — Agent Instructions
 
-You're in **bezalel**, a free Bible-study app for Android and iOS built with
+You're in **bezalel_mob** (the Bezalel phone app; the OTP app is still
+`:bezalel`), a free Bible-study app for Android and iOS built with
 [Mob](https://hexdocs.pm/mob): Elixir on the BEAM, running on the phone,
 rendering native SwiftUI / Jetpack Compose views, with an on-phone agent
 (rho) and Hebrew/Greek study tools over downloaded SQLite packs. Read this
@@ -15,7 +16,7 @@ Muster) applies on top.
 
 | Repo | What | Where it comes from in `mix.exs` |
 |---|---|---|
-| **bezalel** (this, GitHub GenericJam/bezalel, public) | the phone app; `data/` builds the study packs | — |
+| **bezalel_mob** (this, GitHub GenericJam/bezalel_mob, public; was GenericJam/bezalel) | the phone app; `data/` builds the study packs | — |
 | **bezalel_core** (GenericJam/bezalel_core) | the study tools, their pack access, the corpus registry and the system prompt, shared with the website (bezalel_ca); the fixture packs | GitHub, pinned (`sibling/3`) |
 | **mob_bezalel** (GenericJam/mob_bezalel) | the style package: themes, palette, fonts, UI composites | GitHub, pinned (`sibling/3`) |
 | **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn | Hex (`~> 0.1`, `sibling/2`) |
@@ -212,7 +213,7 @@ changelog line). Size is not a reason to skip.
 - The branch isn't behind origin/master (the hook says).
 - **Cross-repo claims are true now**: a pin or a doc naming a sibling's
   commit or version requires that commit pushed or that version published.
-- After the push, watch CI (`gh run list -R GenericJam/bezalel -L 1`,
+- After the push, watch CI (`gh run list -R GenericJam/bezalel_mob -L 1`,
   `gh run watch <id> --exit-status`) and fix red before moving on.
 
 ## Hooks and CI

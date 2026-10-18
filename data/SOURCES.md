@@ -107,7 +107,7 @@ CC-licensed item:
 > wording is otherwise unchanged.
 
 The notice links to how the database is built:
-https://github.com/GenericJam/bezalel/blob/master/data/README.md
+https://github.com/GenericJam/bezalel_mob/blob/master/data/README.md
 
 Each string below also ends with "Modified." where the source is CC-licensed.
 Strings to use verbatim:
@@ -240,7 +240,9 @@ Taken by Kevin on 2026-10-15, on the questions this audit raised:
 2. **`get_textual_variant`** uses Heiser's variant dataset as studybible-mcp builds
    it.
 3. **CC BY-NC material stays**: Bezalel is free, with no ads, ever.
-4. **Links**: the repository is public as GenericJam/bezalel; the attributions
-   screen links the modification notice to
-   https://github.com/GenericJam/bezalel/blob/master/data/README.md and this file
-   to https://github.com/GenericJam/bezalel/blob/master/data/SOURCES.md.
+4. **Links**: the repository is public as GenericJam/bezalel_mob (renamed from
+   GenericJam/bezalel on 2026-10-17; GitHub redirects the old URLs); the
+   attributions screen links the modification notice to
+   https://github.com/GenericJam/bezalel_mob/blob/master/data/README.md and
+   this file to
+   https://github.com/GenericJam/bezalel_mob/blob/master/data/SOURCES.md.

@@ -147,7 +147,7 @@ def main() -> None:
         "built": built.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "bezalel_commit": commit,
         "studybible_mcp": pins["studybible_mcp"],
-        "sources": "https://github.com/GenericJam/bezalel/blob/master/data/SOURCES.md",
+        "sources": "https://github.com/GenericJam/bezalel_mob/blob/master/data/SOURCES.md",
         "packs": entries,
     }
     body = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
