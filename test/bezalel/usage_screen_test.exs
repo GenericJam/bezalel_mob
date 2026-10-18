@@ -235,7 +235,10 @@ defmodule Bezalel.UsageScreenTest do
       # Once the limit lifts, the card says so instead of a stale countdown.
       put_usage(%{"limits" => claude_limits(%{"5h" => window("5 hours", 100, now() - 1)})})
       view = render_info(view, {:rho_usage, :changed})
-      assert text(view) =~ "LIMIT RESET The limit has reset since. Tap Try again."
+
+      assert text(view) =~
+               "READY TO TRY AGAIN That limit no longer holds this model back. Tap Try again."
+
       refute {:settings, :models} in taps(view)
     end
 

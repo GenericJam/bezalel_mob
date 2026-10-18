@@ -316,7 +316,7 @@ defmodule Bezalel.Views.Usage do
     assigns = socket.assigns
 
     if Models.available?(model, assigns.account) do
-      case Usage.preflight(assigns.usage, model.id) do
+      case Usage.preflight(assigns.usage, model.id, auth: assigns.account) do
         :ok -> :ok
         {:exhausted, e} -> explained(socket, e.message, e)
       end
@@ -361,7 +361,7 @@ defmodule Bezalel.Views.Usage do
     e =
       case assigns.explained[error] do
         nil -> Usage.explain(error, state: assigns.usage, model: r.model, auth: assigns.account)
-        stored -> current(stored, r.model, assigns.usage)
+        stored -> current(stored, r.model, assigns)
       end
 
     buttons = [button("Try again", {self(), {:study, :retry}}) | actions(e)]
@@ -386,23 +386,23 @@ defmodule Bezalel.Views.Usage do
 
   # A used-up limit as it stands now: its countdown worked out again, or,
   # once the limit has lifted, a nudge to try again.
-  defp current(%{kind: :limit_reached} = stored, model, usage) do
-    case Usage.preflight(usage, model) do
+  defp current(%{kind: :limit_reached} = stored, model, assigns) do
+    case Usage.preflight(assigns.usage, model, auth: assigns.account) do
       {:exhausted, e} ->
         e
 
       :ok ->
         %{
           stored
-          | title: "Limit reset",
-            message: "The limit has reset since. Tap Try again.",
+          | title: "Ready to try again",
+            message: "That limit no longer holds this model back. Tap Try again.",
             action: :retry,
             until: nil
         }
     end
   end
 
-  defp current(stored, _model, _usage), do: stored
+  defp current(stored, _model, _assigns), do: stored
 
   defp button(label, tap),
     do: UI.pill_button(label, tap, :outline, height: 40, fill: false, text_size: 13)
