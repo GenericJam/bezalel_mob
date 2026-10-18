@@ -4,7 +4,8 @@ defmodule Bezalel.Views.Materials do
 
   **The tab** (`render/1`): everything sent to the agent and every drawing
   it made (`Bezalel.MaterialStore.list/1`), newest first, as a grid,
-  filtered by kind (`:mat_kind`). A material opens its detail
+  filtered by kind (`:mat_kind`). Each card has an × in its corner: Delete,
+  as in the detail. A material opens its detail
   (`:mat_open`): the picture, a player for a recording, its transcript and
   what else was made from it, the conversations it went with (each opens
   in Study), **Ask about this** (it waits as a chip in Study's composer)
@@ -55,7 +56,7 @@ defmodule Bezalel.Views.Materials do
       for {kind, label} <- @kinds, do: {label, {self(), {:materials, {:kind, kind}}}}
 
     index = Enum.find_index(@kinds, fn {kind, _} -> kind == assigns.mat_kind end)
-    tiles = Enum.map(assigns.mat_list, &tile(&1, assigns))
+    tiles = Enum.map(assigns.mat_list, &grid_tile(&1, assigns))
 
     body =
       if tiles == [],
@@ -93,6 +94,44 @@ defmodule Bezalel.Views.Materials do
   defp empty(_kind),
     do: ~MOB(<Text text="None of this kind yet." text_size={14} text_color={:muted} />)
 
+  # A grid card: the square, with an × over its top-right corner that
+  # deletes it (after the same question as the detail's Delete). The
+  # wrapper takes the square's own size (a fixed one would cut across a
+  # padded square's: padding sits outside a fixed size).
+  defp grid_tile(m, assigns) do
+    delete = {self(), {:materials, {:delete, m.id}}}
+    x = Icons.icon(:close, 14, :on_surface)
+
+    ~MOB"""
+    <Box align="top_trailing" fill_width={false}>
+      {tile(m, assigns)}
+      <Box
+        id={"delete-material-" <> m.id}
+        width={40}
+        height={40}
+        align="center"
+        fill_width={false}
+        accessibility_label={"Delete " <> m.name}
+        accessibility_role="button"
+        on_tap={delete}
+      >
+        <Box
+          width={26}
+          height={26}
+          corner_radius={13}
+          background={:surface}
+          border_color={:border}
+          border_width={1}
+          align="center"
+          fill_width={false}
+        >
+          {x}
+        </Box>
+      </Box>
+    </Box>
+    """
+  end
+
   # A grid square: the picture itself, or the kind's icon and the name.
   defp tile(%Material{kind: :image} = m, assigns) do
     tap = {self(), {:materials, {:open, m.id}}}
@@ -124,6 +163,8 @@ defmodule Bezalel.Views.Materials do
     """
   end
 
+  # 84 inside its padding: Mob puts padding outside a fixed size, so the
+  # square is 104 like a picture's.
   defp tile(m, _assigns) do
     tap = {self(), {:materials, {:open, m.id}}}
     glyph = Icons.icon(Attach.icon(m.kind), 24, :secondary)
@@ -131,8 +172,8 @@ defmodule Bezalel.Views.Materials do
     ~MOB"""
     <Box
       id={"material-" <> m.id}
-      width={104}
-      height={104}
+      width={84}
+      height={84}
       corner_radius={12}
       background={:surface}
       border_color={:border}
@@ -384,16 +425,16 @@ defmodule Bezalel.Views.Materials do
   def handle({:delete, id}, socket),
     do: {:noreply, Socket.assign(socket, :sheet, {:delete_material, id})}
 
+  # Its chip goes, and the chips of what was deleted with it (its stills).
   def handle({:confirm_delete, id}, socket) do
     :ok = MaterialStore.delete(id)
 
+    chips =
+      Enum.filter(socket.assigns.attachments, &match?({:ok, _}, MaterialStore.fetch(&1.id, %{})))
+
     {:noreply,
      socket
-     |> Socket.assign(
-       sheet: nil,
-       mat_open: nil,
-       attachments: Enum.reject(socket.assigns.attachments, &(&1.id == id))
-     )
+     |> Socket.assign(sheet: nil, mat_open: nil, attachments: chips)
      |> load()
      |> Helpers.toast("Deleted from Materials.")}
   end

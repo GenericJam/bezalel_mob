@@ -38,6 +38,9 @@ defmodule Bezalel.Views.Attach do
   # A file larger than this isn't kept: its bytes are read whole to name it.
   @max_bytes 250_000_000
 
+  # A new question isn't sent once the user has moved to another conversation.
+  @moved_on "That question wasn't sent: you'd moved on. Its materials are back above the question box."
+
   @doc "The assigns this view keeps, for the screen's mount."
   def assigns do
     [
@@ -497,22 +500,18 @@ defmodule Bezalel.Views.Attach do
     "#{what} #{at}#{Path.extname(path)}"
   end
 
-  # Kept off the screen's process: a file is read whole and hashed. The
-  # chips are for the conversation open now (`kept/3`).
+  # Kept off the screen's process: a file is read whole and hashed. Not
+  # linked to the conversation open now: the chip goes with whichever
+  # question it's sent with, and that links it (`Study.send_prepared/5`).
   defp keep(socket, []), do: socket
 
   defp keep(socket, items) do
-    ctx = ctx(socket)
-    cid = socket.assigns.conversation.id
-
     socket
     |> Socket.assign(:keeping, socket.assigns.keeping + 1)
-    |> Socket.start_async({:keep, cid, make_ref()}, fn ->
-      Enum.map(items, &keep_item(&1, ctx))
-    end)
+    |> Socket.start_async({:keep, make_ref()}, fn -> Enum.map(items, &keep_item/1) end)
   end
 
-  defp keep_item(item, ctx) do
+  defp keep_item(item) do
     with {:ok, %File.Stat{size: size}} <- File.stat(item.path),
          :ok <- if(size <= @max_bytes, do: :ok, else: {:error, :too_large}),
          {:ok, bytes} <- File.read(item.path),
@@ -521,7 +520,7 @@ defmodule Bezalel.Views.Attach do
            mime: item[:mime] || Materials.mime(item.name),
            meta: item.meta
          ],
-         {:ok, m} <- MaterialStore.put(Materials.new(bytes, attrs), bytes, ctx) do
+         {:ok, m} <- MaterialStore.put(Materials.new(bytes, attrs), bytes, %{}) do
       {:ok, m}
     else
       {:error, reason} -> {:error, item.name, reason}
@@ -529,11 +528,10 @@ defmodule Bezalel.Views.Attach do
   end
 
   @doc """
-  Materials kept from the pickers for conversation `cid`
-  (`handle_async({:keep, cid, _}, …)`): chips there if it's still open;
-  if the user has moved on, they're only in Materials, and told so.
+  Materials kept from the pickers (`handle_async({:keep, _}, …)`): chips in
+  the composer, whichever conversation is open now.
   """
-  def kept(cid, result, socket) do
+  def kept(result, socket) do
     socket = Socket.assign(socket, :keeping, max(socket.assigns.keeping - 1, 0))
 
     case result do
@@ -542,7 +540,7 @@ defmodule Bezalel.Views.Attach do
         failed = for {:error, name, reason} <- results, do: {name, reason}
 
         socket
-        |> add_chips(cid, materials)
+        |> add_chips(materials)
         |> keep_failed(failed)
 
       {:exit, reason} ->
@@ -550,9 +548,9 @@ defmodule Bezalel.Views.Attach do
     end
   end
 
-  defp add_chips(socket, _cid, []), do: socket
+  defp add_chips(socket, []), do: socket
 
-  defp add_chips(%{assigns: %{conversation: %{id: cid}}} = socket, cid, materials) do
+  defp add_chips(socket, materials) do
     known = MapSet.new(socket.assigns.attachments, & &1.id)
     added = Enum.reject(materials, &MapSet.member?(known, &1.id))
 
@@ -561,13 +559,6 @@ defmodule Bezalel.Views.Attach do
     |> Images.load(Images.material_images(added))
     |> transcribe_recordings(added)
     |> offer_stills(added)
-  end
-
-  defp add_chips(socket, _cid, _materials) do
-    Helpers.toast(
-      socket,
-      "It's kept in Materials. It wasn't added here: you'd moved to another conversation."
-    )
   end
 
   # A video just added: its stills picker, each still kept also a chip;
@@ -751,11 +742,26 @@ defmodule Bezalel.Views.Attach do
   defp failed({:ok, _}, _m), do: nil
   defp failed({:error, reason}, m), do: {:error, {:transcribe, m, reason}}
 
-  @doc "The question's attachments are ready (`handle_async({:prepare, _}, …)`)."
+  @doc """
+  The question's attachments are ready (`handle_async({:prepare, _}, …)`).
+  A new question goes only to the conversation it was asked in: if the user
+  has moved on, it isn't sent and its chips come back to the composer
+  (one back in its conversation by then is sent). A material deleted while
+  they were made ready isn't sent: the question goes back as for any
+  material not found.
+  """
   def prepared(result, %{assigns: %{preparing: %{} = p}} = socket) do
     socket = Socket.assign(socket, :preparing, nil)
+    moved_on? = p.mode != :again and socket.assigns.conversation.id != p.cid
+    gone = Enum.find(p.materials, &(MaterialStore.fetch(&1.id, %{}) == :error))
 
     case result do
+      {:ok, {:ok, _atts}} when gone != nil ->
+        not_sent(socket, p, {:not_found, gone.id})
+
+      {:ok, {:ok, _atts}} when moved_on? ->
+        socket |> chips_back(p) |> Helpers.toast(@moved_on)
+
       {:ok, {:ok, atts}} ->
         socket
         |> forget_transcripts(p.materials)
@@ -781,39 +787,45 @@ defmodule Bezalel.Views.Attach do
     Socket.assign(socket, :transcripts, transcripts)
   end
 
-  # The question didn't go: in the conversation still open, its words and
-  # chips come back (before what was added meanwhile; a deleted material's
-  # chip doesn't); a question asked again keeps its Try again.
-  defp not_sent(%{assigns: %{conversation: %{id: cid}}} = socket, %{cid: cid} = p, reason) do
+  # The question didn't go. Asked again: it keeps its Try again in its
+  # conversation. Otherwise its chips come back to the composer wherever
+  # the user is (`chips_back/3`), and its words too if they're still in its
+  # conversation.
+  defp not_sent(socket, %{mode: :again, cid: cid} = p, reason) do
     message = send_error(reason, p.mode, socket)
 
-    case p.mode do
-      :again ->
-        Helpers.toast(socket, message, ask_again: socket.assigns.streams[cid] == nil)
-
-      _ask_or_steer ->
-        gone = with {:not_found, id} <- reason, do: id
-        chips = Enum.reject(p.materials, &(&1.id == gone))
-        known = MapSet.new(chips, & &1.id)
-        added = Enum.reject(socket.assigns.attachments, &MapSet.member?(known, &1.id))
-
-        # A dictation started meanwhile writes over the box from its base:
-        # the question goes back before both.
-        dictation =
-          with %{base: base} = d <- socket.assigns.dictation,
-               do: %{d | base: before(p.text, base)}
-
-        socket
-        |> Socket.assign(
-          attachments: chips ++ added,
-          draft: before(p.text, socket.assigns.draft),
-          dictation: dictation
-        )
-        |> Helpers.toast(message)
-    end
+    if socket.assigns.conversation.id == cid,
+      do: Helpers.toast(socket, message, ask_again: socket.assigns.streams[cid] == nil),
+      else: Helpers.toast(socket, message)
   end
 
-  defp not_sent(socket, p, reason), do: Helpers.toast(socket, send_error(reason, p.mode, socket))
+  defp not_sent(%{assigns: %{conversation: %{id: cid}}} = socket, %{cid: cid} = p, reason) do
+    # A dictation started meanwhile writes over the box from its base:
+    # the question goes back before both.
+    dictation =
+      with %{base: base} = d <- socket.assigns.dictation, do: %{d | base: before(p.text, base)}
+
+    socket
+    |> chips_back(p)
+    |> Socket.assign(draft: before(p.text, socket.assigns.draft), dictation: dictation)
+    |> Helpers.toast(send_error(reason, p.mode, socket))
+  end
+
+  defp not_sent(socket, p, reason) do
+    socket
+    |> chips_back(p)
+    |> Helpers.toast(@moved_on <> " " <> send_error(reason, p.mode, socket))
+  end
+
+  # A question's chips back in the composer, before what was added meanwhile;
+  # a material deleted meanwhile (and what went with it, a video's stills)
+  # doesn't come back.
+  defp chips_back(socket, p) do
+    chips = Enum.filter(p.materials, &match?({:ok, _}, MaterialStore.fetch(&1.id, %{})))
+    known = MapSet.new(chips, & &1.id)
+    added = Enum.reject(socket.assigns.attachments, &MapSet.member?(known, &1.id))
+    Socket.assign(socket, :attachments, chips ++ added)
+  end
 
   defp before(text, typed) do
     case String.trim(typed) do

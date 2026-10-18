@@ -351,8 +351,7 @@ defmodule Bezalel.AppScreen do
 
   def handle_async(:build, result, socket), do: {:noreply, Workshop.built(result, socket)}
 
-  def handle_async({:keep, cid, _ref}, result, socket),
-    do: {:noreply, Attach.kept(cid, result, socket)}
+  def handle_async({:keep, _ref}, result, socket), do: {:noreply, Attach.kept(result, socket)}
 
   def handle_async({:transcribe, id}, result, socket) do
     socket = Attach.transcribed(id, result, socket)

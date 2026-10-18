@@ -19,11 +19,10 @@ Muster) applies on top.
 | **bezalel_mob** (this, GitHub GenericJam/bezalel_mob, public; was GenericJam/bezalel) | the phone app; `data/` builds the study packs | — |
 | **bezalel_core** (GenericJam/bezalel_core) | the study tools, their pack access, the corpus registry and the system prompt; the agent's surface (reply fold, passage card, transcript reading and branch moves); shared with the website (bezalel_ca); the fixture packs | GitHub, pinned (`sibling/3`) |
 | **mob_bezalel** (GenericJam/mob_bezalel) | the style package: themes, palette, fonts, UI composites | GitHub, pinned (`sibling/3`) |
-| **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn | GitHub, pinned (09cf5ae, attachments by reference) with `override: true` until its next release |
+| **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn | Hex, `~> 0.2` (attachments by reference) (`sibling/2`) |
 | **mob_secure_store** (GenericJam/mob_secure_store) | Keychain / Keystore secrets plugin | GitHub, pinned until on Hex |
 | **mob_markdown** (GenericJam/mob_markdown) | native Markdown views (replies, tool results) | GitHub, pinned until on Hex |
-| **mob_media** (GenericJam/mob_media) | media info, audio to PCM, video frames (Materials) | GitHub, pinned until on Hex (acknowledged unsigned in `mob.exs`) |
-| mob_photos, mob_camera, mob_speech, mob_whisper | photo library, camera, dictation, Whisper on the phone | Hex (signed) |
+| mob_photos, mob_camera, mob_speech, mob_whisper, mob_media | photo library, camera, dictation, Whisper on the phone; media info, audio to PCM, video frames (Materials) | Hex (signed) |
 | mob, mob_dev | the framework | Hex |
 
 `BEZALEL_LOCAL_DEPS=1` uses the sibling checkouts (`../bezalel_core`,
@@ -339,7 +338,10 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   (Study's speaker, Settings → Voice). Native calls go through
   `Bezalel.Native`; tests use `test/support/materials_fakes.ex`, MobSpeech's
   and MobMedia's Fake engines. A stored question's materials are sent again
-  on Try again.
+  on Try again. Chips belong to the composer, not a conversation: they stay
+  across conversation switches until sent or removed, and a material is
+  linked ("went with") only when its question is sent; each grid card
+  deletes with its × (decisions/2026-10-18-chips-follow-the-composer.md).
 - Data: `Bezalel.Library`: each conversation's transcript is its rho
   session (JSONL in `Rho.Session.dir/0`, read by bezalel_core's
   `Bezalel.Library.Transcript`; Delete and Undo are branch moves), SQLite

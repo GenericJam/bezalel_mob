@@ -176,9 +176,11 @@ defmodule Bezalel.Views.Helpers do
 
   @doc """
   Opens a conversation in Study. A toast from the previous one (its Undo and
-  Ask again act on that conversation) is dropped. The agent's loops of the
-  other conversations go, unless their reply is still streaming (they go
-  when it ends).
+  Ask again act on that conversation) is dropped, and so are the words
+  typed; the chips stay: they belong to the composer and go with the next
+  question, wherever it's asked (decisions/2026-10-18-chips-follow-the-composer.md).
+  The agent's loops of the other conversations go, unless their reply is
+  still streaming (they go when it ends).
   """
   def open_conversation(socket, conversation) do
     Settings.put_conversation_id(conversation.id)
@@ -198,10 +200,7 @@ defmodule Bezalel.Views.Helpers do
       menu: nil,
       toast: nil,
       switched: false,
-      draft: "",
-      # The chips were for the conversation left; they stay in Materials.
-      # (What's known of transcripts stays: one being made still is.)
-      attachments: []
+      draft: ""
     )
     |> Socket.assign(:expanded, expanded)
     |> Socket.assign(:tab, :study)

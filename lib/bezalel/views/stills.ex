@@ -57,7 +57,6 @@ defmodule Bezalel.Views.Stills do
       stills: %{
         video: video,
         ref: ref,
-        cid: socket.assigns.conversation.id,
         chip: Keyword.get(opts, :chip, false),
         duration_ms: nil,
         at_ms: 0,
@@ -288,8 +287,9 @@ defmodule Bezalel.Views.Stills do
   defp cant(reason), do: "The frame couldn't be made (#{inspect(reason)})."
 
   # The frame shown, kept as the video's still, linked to the conversation
-  # open; a chip too when the picker came from the composer there. The same
-  # frame kept twice is one still (named by its bytes).
+  # open; a chip too when the picker came from the composer (chips are the
+  # composer's, whichever conversation is open). The same frame kept twice
+  # is one still (named by its bytes).
   defp keep(socket, s, frame) do
     ctx = %{session_id: socket.assigns.conversation.session_id}
 
@@ -310,7 +310,7 @@ defmodule Bezalel.Views.Stills do
     end
   end
 
-  defp chip(%{assigns: %{conversation: %{id: cid}}} = socket, %{chip: true, cid: cid}, still) do
+  defp chip(socket, %{chip: true}, still) do
     if Enum.any?(socket.assigns.attachments, &(&1.id == still.id)),
       do: socket,
       else: Socket.assign(socket, :attachments, socket.assigns.attachments ++ [still])

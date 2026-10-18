@@ -59,11 +59,11 @@ config :mob, :plugins, [
 ]
 
 # mob_secure_store (the Keychain / Keystore rho keeps sign-ins and API keys
-# in), mob_markdown (the native Markdown view replies render in) and
-# mob_media (the media helpers) aren't released, so their checkouts are
-# unsigned: build them anyway. Once they're on Hex, drop them here (they are
-# already in :trusted_plugins below, or add them).
-config :mob, :acknowledge_unsafe_plugins, [:mob_secure_store, :mob_markdown, :mob_media]
+# in) and mob_markdown (the native Markdown view replies render in) aren't
+# released, so their checkouts are unsigned: build them anyway. Once they're
+# on Hex, drop them here (they are already in :trusted_plugins below, or add
+# them). mob_media is signed, from Hex.
+config :mob, :acknowledge_unsafe_plugins, [:mob_secure_store, :mob_markdown]
 
 # Style packages: the app's look. mob_bezalel is the Bezalel design plugin
 # (themes, palette, fonts); boot applies its default, MobBezalel.Dark.

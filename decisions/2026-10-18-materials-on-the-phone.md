@@ -1,6 +1,8 @@
 # Materials on the phone
 
-2026-10-18. Status: accepted. Contracts: bezalel_core's
+2026-10-18. Status: accepted; what happens to chips when the user moves to
+another conversation ("Sending with materials") superseded by
+`2026-10-18-chips-follow-the-composer.md`. Contracts: bezalel_core's
 `decisions/2026-10-18-materials.md` (Kevin's decisions, the routing rule,
 the store behaviour). Beads: bezalel-at6.6, .7, .8, .9 (and .10 in part).
 
@@ -72,7 +74,10 @@ decodes compressed audio and video on the phone.
   (mob_bezalel compacts the bar for five; GenericJam/mob_bezalel#1).
 - **Plugins**: mob_photos, mob_camera, mob_speech, mob_whisper from Hex
   (trusted key); mob_media pinned to a GitHub commit and acknowledged as
-  unsigned until its Hex release, then moved to the trusted key.
+  unsigned until its Hex release, then moved to the trusted key. (Done
+  2026-10-18: mob_media `~> 0.1` from Hex, 0.1.0 signed with the mob release
+  key, in `:trusted_plugins` and off `:acknowledge_unsafe_plugins`; rho
+  `~> 0.2` from Hex, 0.2.0 being the pinned 09cf5ae, its override dropped.)
 
 ## Consequences
 

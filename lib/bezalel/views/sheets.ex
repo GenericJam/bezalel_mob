@@ -64,7 +64,7 @@ defmodule Bezalel.Views.Sheets do
     [
       ~MOB(<Text text="Delete this material?" font={:display} text_size={24} text_color={:on_background} />),
       ~MOB(<Text
-  text="It goes from this phone, with its transcript. A conversation that sent it keeps its words but can't show it, and the agent is told it couldn't be loaded. A drawing made from it stays."
+  text="It goes from this phone, with its transcript and stills. A conversation that sent it keeps its words but can't show it, and the agent is told it couldn't be loaded. A drawing made from it stays."
   text_size={14.5}
   line_height={1.55}
   text_color={:on_background}
