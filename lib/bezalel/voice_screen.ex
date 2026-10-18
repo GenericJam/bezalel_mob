@@ -109,6 +109,7 @@ defmodule Bezalel.VoiceScreen do
         app: params[:app],
         voice: voice,
         voices: :loading,
+        sample_pending: 0,
         open: MapSet.new(["en" | if(voice, do: [base(voice.language)], else: [])])
       )
       |> Mob.Socket.start_async(:voices, fn -> Native.voices() end)
@@ -343,10 +344,18 @@ defmodule Bezalel.VoiceScreen do
     {:noreply, Mob.Socket.assign(socket, :open, open)}
   end
 
-  def handle_info({:tap, :back}, socket),
-    do: {:noreply, socket |> Native.stop_speaking() |> Mob.Socket.pop_screen()}
+  # Stops only this screen's own sample: the stop is global, and a reply
+  # being read when Voice was opened should keep going.
+  def handle_info({:tap, :back}, socket) do
+    socket = if socket.assigns.sample_pending > 0, do: Native.stop_speaking(socket), else: socket
+    {:noreply, Mob.Socket.pop_screen(socket)}
+  end
 
-  # The end of a sample ({:speech, …}) and anything else.
+  def handle_info({:speech, ended}, socket) when ended in [:done, :cancelled, :failed],
+    do:
+      {:noreply,
+       Mob.Socket.assign(socket, :sample_pending, max(socket.assigns.sample_pending - 1, 0))}
+
   def handle_info(_message, socket), do: {:noreply, socket}
 
   # Stores the choice, tells Settings, and says the sample in it.
@@ -360,5 +369,6 @@ defmodule Bezalel.VoiceScreen do
     socket
     |> Native.stop_speaking()
     |> Native.speak(@sample, Settings.voice_opts())
+    |> Mob.Socket.assign(:sample_pending, socket.assigns.sample_pending + 1)
   end
 end

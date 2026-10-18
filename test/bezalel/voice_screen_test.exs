@@ -110,6 +110,22 @@ defmodule Bezalel.VoiceScreenTest do
     assert "Your phone's default voice" in texts(view)
   end
 
+  test "Back stops only this screen's own sample, not a reply already being read" do
+    view = loaded([@us, @uk])
+    render_info(view, {:tap, :back})
+    assert Native.calls() == []
+
+    view = render_info(view, {:tap, :try})
+    Native.reset()
+    render_info(view, {:tap, :back})
+    assert [{:stop_speaking, nil}] = Native.calls()
+
+    Native.reset()
+    view = render_info(view, {:speech, :done})
+    render_info(view, {:tap, :back})
+    assert Native.calls() == []
+  end
+
   test "a stored voice this phone doesn't have says so; its language's group opens" do
     Settings.put_voice(%{id: "fr-fr-x-gone-local", name: "French gone", language: "fr-FR"})
     view = loaded([@us, @french])
