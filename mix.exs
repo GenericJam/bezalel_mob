@@ -52,12 +52,13 @@ defmodule Bezalel.MixProject do
       sibling(
         :bezalel_core,
         "GenericJam/bezalel_core",
-        "e7fe8ea6e7c8002fb8597013688608f8423e792d"
+        "3d650a1f2f06ce9736598b786797f4dcb852cdd3"
       ),
       # The agent core: models, sign-in, usage, Dyn; attachments by reference
       # (Materials) from 0.2; Rho.Consult and ask_model (Pushback) from 0.3;
-      # Rho.Images (pictures on the ChatGPT sign-in) from 0.4.
-      sibling(:rho, "~> 0.4"),
+      # Rho.Images (pictures on the ChatGPT sign-in) from 0.4; the ChatGPT
+      # sign-in's own model list (Rho.Models.Codex) from 0.5.1.
+      sibling(:rho, "~> 0.5.1"),
       # Materials: the photo library, the camera, live dictation (the
       # platform recogniser) and Whisper on the phone (recordings, dictation's
       # fallback). Signed plugins from Hex, activated in mob.exs. mob_photos

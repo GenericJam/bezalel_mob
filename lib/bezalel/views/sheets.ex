@@ -166,9 +166,12 @@ defmodule Bezalel.Views.Sheets do
   end
 
   defp content(:models, assigns) do
+    # A ChatGPT model the sign-in stopped offering shows as its default.
+    current = Models.get(assigns.model_id).id
+
     groups =
       for {group, models} <- Models.groups(assigns.account) do
-        rows = Enum.map(models, &model_row(&1, assigns.model_id))
+        rows = Enum.map(models, &model_row(&1, current))
 
         ~MOB"""
         <Column gap={6} fill_width={true}>

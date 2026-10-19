@@ -12,6 +12,7 @@ defmodule Bezalel.LiveAgentTest do
   alias Bezalel.Test.{Browser, FakeLLM, MemoryStore}
   alias Bezalel.Views.{Helpers, Study}
   alias MobBezalel.UI
+  alias Rho.Models.Codex
 
   @lookup {:tool_call, "c1", "lookup_verse", %{"reference" => "Exodus 31:2-3"}}
 
@@ -777,5 +778,38 @@ defmodule Bezalel.LiveAgentTest do
       assert assigns(view).images[{key, :chat}] == :error
       assert text(view) =~ "This picture can’t be shown."
     end
+  end
+
+  test "a ChatGPT model the sign-in stopped offering: the question goes to its default, which becomes the choice, with a toast" do
+    :ok =
+      Rho.Auth.put(:openai_codex, %{
+        "type" => "oauth",
+        "access" => "a",
+        "refresh" => "r",
+        "expires" => System.os_time(:millisecond) + 3_600_000,
+        "accountId" => "acc"
+      })
+
+    Settings.put_model("openai_codex:gpt-5.5")
+    default = "openai_codex:" <> Codex.default()
+    refute default == "openai_codex:gpt-5.5"
+    # The picker and the labels show what replies will run on.
+    assert Bezalel.Models.get("openai_codex:gpt-5.5").id == default
+
+    script([[{:text, "First."}], [{:text, "Second."}]])
+    view = AppScreen |> mount_screen() |> ask("Who is Bezalel?")
+    assert_receive {:llm_request, %{model: ^default}}
+
+    assert assigns(view).toast.text == Codex.replaced_notice("openai_codex:gpt-5.5", default)
+
+    assert Settings.model() == default
+    view = until(view)
+    assert text(view) =~ "First."
+
+    view = render_info(view, {:toast_expire, assigns(view).toast.ref})
+    view = view |> ask("And Oholiab?") |> until()
+    assert_receive {:llm_request, %{model: ^default}}
+    assert text(view) =~ "Second."
+    assert assigns(view).toast == nil
   end
 end
