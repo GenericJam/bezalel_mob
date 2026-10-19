@@ -494,10 +494,11 @@ defmodule Bezalel.PushbackTest do
         |> render_info({:tap, {:tab, :settings}})
         |> render_info({:tap, {:settings, :image_models}})
 
-      assert assigns(view).study.image_model == "openai:gpt-image-2"
+      # None chosen and nothing signed in: Automatic is selected, and is gpt-image.
+      assert assigns(view).study.image_model == nil
 
-      assert %{props: %{border_color: :secondary}} =
-               find(view, :box, id: "image-openai:gpt-image-2")
+      assert %{props: %{border_color: :secondary}} = find(view, :box, id: "image-automatic")
+      assert "Automatic: OpenAI gpt-image-2" in texts(view)
 
       refute Map.has_key?(find(view, :box, id: "image-google:gemini-3-pro-image").props, :on_tap)
 
@@ -508,6 +509,44 @@ defmodule Bezalel.PushbackTest do
       view = render_info(view, {:tap, elem(tap, 1)})
       assert assigns(view).study.image_model == "google:gemini-3-pro-image"
       assert "Gemini 3 Pro Image" in texts(view)
+    end
+
+    test "Pictures by: ChatGPT on the ChatGPT sign-in; Automatic draws with it once signed in" do
+      view =
+        AppScreen
+        |> mount_screen()
+        |> render_info({:tap, {:tab, :settings}})
+        |> render_info({:tap, {:settings, :image_models}})
+
+      row = fn view -> find(view, :box, id: "image-openai_codex:gpt-image") end
+      refute Map.has_key?(row.(view).props, :on_tap)
+      assert "Needs your ChatGPT sign-in" in texts(view)
+
+      :ok =
+        Rho.Auth.put(:openai_codex, %{
+          "type" => "oauth",
+          "access" => "a",
+          "refresh" => "r",
+          "expires" => System.os_time(:millisecond) + 3_600_000,
+          "accountId" => "acc"
+        })
+
+      view = render_info(view, {:rho_auth, :changed})
+      assert %{props: %{on_tap: tap}} = row.(view)
+      assert "Automatic: ChatGPT (your sign-in)" in texts(view)
+      assert assigns(view).study.image_model == nil
+
+      # Chosen, then back to Automatic; the Settings row says which.
+      view = render_info(view, {:tap, elem(tap, 1)})
+      assert assigns(view).study.image_model == "openai_codex:gpt-image"
+      assert "ChatGPT (your sign-in)" in texts(view)
+      refute "Automatic: ChatGPT (your sign-in)" in texts(view)
+
+      view = render_info(view, {:tap, {:settings, :image_models}})
+      %{props: %{on_tap: back}} = find(view, :box, id: "image-automatic")
+      view = render_info(view, {:tap, elem(back, 1)})
+      assert assigns(view).study.image_model == nil
+      assert "Automatic: ChatGPT (your sign-in)" in texts(view)
     end
   end
 end
