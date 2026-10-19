@@ -471,8 +471,14 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   `Pushback.offered?/2`. Both go through `Bezalel.Agent.pushback/4` /
   `auto/4`; the pushback streams as a reply of its own
   (`Reply.pushback/4`: the CONSULT block, `MobBezalel.UI.consult_block/5`,
-  then the answer). A failed critique (`:consult_failed`) stays as a card
-  with Ask for pushback again and never runs the failed-run path. The
+  then the answer; the status line names the critic while it comes). The
+  answering model is preflighted like a question before the critique is
+  asked for. A failed critique (`:consult_failed`) stays as a card with
+  Ask for pushback again and never runs the failed-run path; a failed
+  answer to a critique drops the critique too (`Library.drop_pushback/1`)
+  and offers Ask for pushback again. A loop started for a refused
+  pushback is shut; the switch releases a stale loop (edits waiting)
+  before it pushes back on a fresh one. The
   loop also has rho's `ask_model` (`Rho.Tools.Consult`, "have GPT push
   back"), with `config :rho, :consult_system` giving it the same brief.
   Tests: `test/bezalel/pushback_test.exs` (the fake model answers the

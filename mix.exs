@@ -34,7 +34,7 @@ defmodule Bezalel.MixProject do
       {:mob_dev, "~> 0.7.29", only: :dev, runtime: false},
       # The design plugin (style package): Bezalel's themes, palette, fonts,
       # icons and composites (the composer's + / mic slots and chips).
-      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "b6f076bc8bdb3d69c7442d8a66cbbd9ddaacfb31"),
+      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "ab9c546bcaddde8087ef4f1d186435d4e7a784c8"),
       # Native Markdown views (Markwon / Foundation) for replies and tool
       # results. Unreleased: pinned to a commit.
       sibling(

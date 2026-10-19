@@ -67,8 +67,9 @@ defmodule Bezalel.Agent do
   @doc """
   The conversation's Pushback switch, after `reply` (a
   `Bezalel.Agent.Reply`, folded through `:agent_end`) ended:
-  `Bezalel.Agent.Pushback.auto/4` on its loop. `:skip` when there's no
-  loop or nothing to push back on.
+  `Bezalel.Agent.Pushback.auto/4` on its loop, started again if the
+  screen released it (edits or preferences waited for the reply).
+  `:skip` when there's nothing to push back on.
   """
   @callback auto(
               conversation_id :: integer(),

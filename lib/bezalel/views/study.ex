@@ -134,6 +134,11 @@ defmodule Bezalel.Views.Study do
     """
   end
 
+  # While a pushback's critique comes, the critic is the one at work.
+  defp replying_label(%Reply{status: :running, consult: %{status: status, model: critic}})
+       when status in [:waiting, :running],
+       do: Pushback.label(critic) <> " is pushing back…"
+
   defp replying_label(%Reply{status: :running} = r),
     do: r.retry || Models.get(r.model).name <> " is replying…"
 
@@ -213,7 +218,7 @@ defmodule Bezalel.Views.Study do
 
   # The reply streaming in (or failed): its blocks, card and pictures so
   # far (a drawing among them), the messages waiting to steer it, and its
-  # error (a pushback whose critique didn't come: its own).
+  # error (a pushback's: its own, `failure/2`).
   defp live(nil, _blocks, _assigns), do: []
 
   defp live(r, blocks, assigns) do
@@ -229,18 +234,38 @@ defmodule Bezalel.Views.Study do
       {MaterialsView.in_message(r.materials, assigns)}
       {Sources.render(pseudo.id, Reply.sources(r), assigns.expanded)}
       {pending}
-      {UsageView.failure(r, assigns)}
-      {pushback_failure(r)}
+      {failure(r, assigns)}
     </Column>
     """
   end
 
   # A live reply's blocks; a critique that never came shows as its error
-  # instead (`pushback_failure/1`).
+  # instead (`pushback_failure/1`), and a pushback whose answer failed as
+  # its card alone (the critique and the answer left the session).
   defp live_blocks(%Reply{reason: :consult_failed} = r),
     do: Enum.reject(Reply.blocks(r), &(&1["id"] == "consult"))
 
+  defp live_blocks(%Reply{status: :error, consult: %{status: :ok}}), do: []
+
   defp live_blocks(r), do: Reply.blocks(r)
+
+  # A failed reply's card (`Bezalel.Views.Usage.failure/3`). A pushback's
+  # is its own: no question failed, so it isn't asked again; the pushback
+  # is asked for again instead.
+  defp failure(%Reply{reason: :consult_failed} = r, _assigns), do: pushback_failure(r)
+
+  defp failure(%Reply{status: :error, consult: %{status: :ok, model: critic}} = r, assigns) do
+    note =
+      "The answer to #{Pushback.label(critic)}'s pushback didn't come, so the pushback was " <>
+        "set aside. The answer stands as it was."
+
+    UsageView.failure(r, assigns,
+      retry: {"Ask for pushback again", {self(), {:study, :pushback}}},
+      note: note
+    )
+  end
+
+  defp failure(r, assigns), do: UsageView.failure(r, assigns)
 
   # No run failed, so no Try again of the question: the critique can be
   # asked for again (its round wasn't used).
@@ -782,10 +807,11 @@ defmodule Bezalel.Views.Study do
   # The Pushback button (and Ask for pushback again): the critic chosen in
   # Settings reviews the last reply, then the model chosen now answers it.
   # What stops it (no critic, its provider not signed in, a reply still
-  # running, one round per reply) is said as the toast.
+  # running, one round per reply, the answering model's limit used up or
+  # no credential for it) is said as the toast.
   def handle(:pushback, socket) do
     cid = socket.assigns.conversation.id
-    model = Helpers.model(socket).id
+    model = Helpers.model(socket)
     critic = socket.assigns.study.pushback_model
 
     cond do
@@ -796,13 +822,13 @@ defmodule Bezalel.Views.Study do
         {:noreply, still_sending(socket, "Ask for pushback")}
 
       true ->
-        case Agent.pushback(cid, model, critic, self()) do
-          {:ok, session_id} ->
-            {:noreply,
-             socket |> Socket.assign(:menu, nil) |> pushing_back(cid, model, critic, session_id)}
-
-          {:error, sentence} ->
-            {:noreply, Helpers.toast(socket, sentence)}
+        with :ok <- lead_ready(socket, model, critic),
+             {:ok, session_id} <- Agent.pushback(cid, model.id, critic, self()) do
+          {:noreply,
+           socket |> Socket.assign(:menu, nil) |> pushing_back(cid, model.id, critic, session_id)}
+        else
+          {:error, socket, text} -> {:noreply, Helpers.toast(socket, "No pushback: " <> text)}
+          {:error, sentence} -> {:noreply, Helpers.toast(socket, sentence)}
         end
     end
   end
@@ -1234,9 +1260,14 @@ defmodule Bezalel.Views.Study do
 
   # A pushback whose critique failed: no run failed (nothing to drop or
   # ask again). Its error stays in the chat where the critique would have
-  # been, with a way to ask for it again; the loop stays (idle) for that.
-  defp finish(socket, cid, %Reply{status: :done, reason: :consult_failed} = reply),
-    do: socket |> put_stream(cid, %{reply | pending: []}) |> unsend(cid, reply.pending)
+  # been, with a way to ask for it again; the loop stays (idle) for that,
+  # unless edits wait for it or the conversation isn't open.
+  defp finish(socket, cid, %Reply{status: :done, reason: :consult_failed} = reply) do
+    socket
+    |> put_stream(cid, %{reply | pending: []})
+    |> release_if_unused(cid)
+    |> unsend(cid, reply.pending)
+  end
 
   # Messages sent as the run was ending: after a normal end the loop runs
   # them next, as a new run; at its limits (`:max_iterations`, `:cost_cap`)
@@ -1270,14 +1301,25 @@ defmodule Bezalel.Views.Study do
     |> unsend(cid, reply.pending)
   end
 
+  # A pushback whose critique came but whose answer to it failed: the
+  # critique goes with the failed run (`Library.drop_pushback/1`), so the
+  # reviewed reply is the last again; the card asks for the pushback again
+  # (its round wasn't used) rather than the question.
+  defp finish(socket, cid, %Reply{status: :error, consult: %{status: :ok}} = reply) do
+    :ok = Library.drop_pushback(cid)
+    socket |> release(cid) |> failed(cid, reply)
+  end
+
   # Failed: the error stays in the chat, with Try again; the failed run's
   # entries leave the session's branch (the loop is idle), and Try again
   # asks the question anew.
   defp finish(socket, cid, %Reply{status: :error} = reply) do
     :ok = Library.drop_failed(cid)
+    socket |> release(cid) |> failed(cid, reply)
+  end
 
+  defp failed(socket, cid, reply) do
     socket
-    |> release(cid)
     |> drop_stream(cid)
     |> put_stream(cid, %{reply | pending: []})
     |> reload_if_open(cid)
@@ -1287,15 +1329,24 @@ defmodule Bezalel.Views.Study do
   # The conversation's Pushback switch: the reply that just ended is
   # pushed back on (`Bezalel.Agent.auto/4` skips one that can't be: the
   # answer to a critique, one critiqued within its turn); the loop stays
-  # for it. A critic that can't push back is said, in the open
-  # conversation; the loop then goes as usual.
+  # for it. Edits or preferences that waited for the reply are made first
+  # (the loop goes, and the pushback starts it again on what they left),
+  # so the critic and the answer don't see a deleted message. A critic
+  # that can't push back, or an answering model that can't answer now, is
+  # said in the open conversation; the loop then goes as usual.
   defp auto_pushback(socket, cid, reply) do
     critic = socket.assigns.study.pushback_model
+    socket = if MapSet.member?(socket.assigns.stale, cid), do: release(socket, cid), else: socket
 
     with %Library.Conversation{pushback: true} <- Library.get_conversation(cid),
+         nil <- reply.consult,
+         :ok <- lead_ready(socket, Models.get(reply.model), critic),
          {:ok, session_id} <- Agent.auto(cid, reply, critic, self()) do
       pushing_back(socket, cid, reply.model, critic, session_id)
     else
+      {:error, socket, text} when cid == socket.assigns.conversation.id ->
+        socket |> Helpers.toast("No pushback: " <> text) |> release_if_unused(cid)
+
       {:error, sentence} when cid == socket.assigns.conversation.id ->
         socket |> Helpers.toast(sentence) |> release_if_unused(cid)
 
@@ -1303,6 +1354,13 @@ defmodule Bezalel.Views.Study do
         release_if_unused(socket, cid)
     end
   end
+
+  # Can the model that answers a critique answer now (`UsageView.preflight/2`,
+  # as for a question)? Checked before the critique is asked for, so a
+  # critique isn't spent on an answer that can't come. With no critic,
+  # Pushback says that instead.
+  defp lead_ready(_socket, _model, nil), do: :ok
+  defp lead_ready(socket, model, _critic), do: UsageView.preflight(socket, model)
 
   # A pushback started on the conversation's loop: it streams as a reply
   # of its own (`Bezalel.Agent.Reply.pushback/4`), its critique first.

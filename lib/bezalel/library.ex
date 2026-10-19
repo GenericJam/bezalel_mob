@@ -455,6 +455,32 @@ defmodule Bezalel.Library do
     end
   end
 
+  @doc """
+  Drops a pushback whose answer failed: the critique (the last of another
+  model's messages) and the failed run after it, so the reply it reviewed
+  is the last again and its pushback can be asked for anew (the round
+  wasn't used). The conversation must have no loop.
+  """
+  @spec drop_pushback(integer()) :: :ok
+  def drop_pushback(conversation_id) do
+    with %Conversation{session_file: file} = c when is_binary(file) <-
+           get_conversation(conversation_id),
+         {session, branch} = open(c, Models.default()),
+         {after_rev, [critique | _]} <-
+           branch |> Enum.reverse() |> Enum.split_while(&(not critique?(&1))),
+         {parent, copies} <-
+           Transcript.delete(branch, Enum.map([critique | after_rev], & &1["id"])) do
+      {moved, added} = move(session, parent, copies)
+      written(conversation_id, moved, extend(branch, added), false)
+      :ok
+    else
+      _ -> :ok
+    end
+  end
+
+  defp critique?(%{"type" => "custom_message"} = entry), do: Session.attribution(entry) != nil
+  defp critique?(_entry), do: false
+
   # The conversation's session and its active branch.
   defp open(%Conversation{session_file: nil} = c, model) do
     session = Session.new(Session.dir(), model, Rho.Config.data_dir())

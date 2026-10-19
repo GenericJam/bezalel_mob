@@ -43,15 +43,15 @@ defmodule Bezalel.Agent.Live do
   **Pushback** (bezalel_core's `Bezalel.Agent.Pushback`): `pushback/4`
   (the button) and `auto/4` (the conversation's switch, after a reply)
   run the critic on the conversation's loop (started for it if it was
-  released), so the critique and the lead's answer to it stream to the
-  screen like a reply.
+  released, and shut again when the pushback doesn't go), so the
+  critique and the lead's answer to it stream to the screen like a reply.
 
   Loop options from `config :bezalel, Bezalel.Agent.Live` are added to
   the loop's (tests set `:llm` to a scripted model).
   """
   @behaviour Bezalel.Agent
 
-  alias Bezalel.Agent.{Details, Pushback}
+  alias Bezalel.Agent.{Details, Pushback, Reply}
   alias Bezalel.{Library, Settings}
   alias Bezalel.Study.{Prompt, Tools}
   alias Rho.Dyn.Source
@@ -144,36 +144,44 @@ defmodule Bezalel.Agent.Live do
   end
 
   @impl true
-  def pushback(conversation_id, model, critic, subscriber) do
-    with {:ok, loop} <- pushback_loop(conversation_id, model, subscriber),
-         {:ok, _task} <- Pushback.start(loop, critic) do
-      {:ok, Loop.config(loop).session.id}
-    end
-  end
+  def pushback(conversation_id, model, critic, subscriber),
+    do: on_loop(conversation_id, model, subscriber, &Pushback.start(&1, critic))
 
+  # A loop released before the reply ended (edits or changed preferences
+  # waited for it) is started again, on the reply's model, so the
+  # pushback runs on what the session and the preferences now hold.
   @impl true
-  def auto(conversation_id, reply, critic, subscriber) do
-    case whereis(conversation_id) do
-      nil ->
-        :skip
+  def auto(_conversation_id, _reply, nil, _subscriber), do: :skip
 
-      loop ->
-        with :ok <- Loop.subscribe(loop, subscriber),
-             {:ok, _task} <- Pushback.auto(loop, reply, critic),
-             do: {:ok, Loop.config(loop).session.id}
-    end
-  end
+  def auto(conversation_id, %Reply{consult: nil, status: :done} = reply, critic, subscriber),
+    do: on_loop(conversation_id, reply.model, subscriber, &Pushback.auto(&1, reply, critic))
 
-  # The lead answers the critique on the model chosen now.
-  defp pushback_loop(conversation_id, model, subscriber) do
+  def auto(_conversation_id, _reply, _critic, _subscriber), do: :skip
+
+  # Runs `fun` on the conversation's loop, started if it was released;
+  # the lead answers the critique on the model chosen now. A loop started
+  # for a pushback that doesn't go is shut again: the screen doesn't track
+  # it, so nothing else would release it.
+  defp on_loop(conversation_id, model, subscriber, fun) do
+    started? = whereis(conversation_id) == nil
+
     with {:ok, loop} <- loop(conversation_id, model),
          :ok <- Loop.subscribe(loop, subscriber) do
       # Busy: it keeps its model, and Pushback says to wait.
       if Loop.snapshot(loop).status == :idle, do: _ = use_model(loop, model)
-      {:ok, loop}
+
+      case fun.(loop) do
+        {:ok, _task} -> {:ok, Loop.config(loop).session.id}
+        refused -> refused(refused, loop, started?)
+      end
     else
       {:error, reason} -> {:error, "Pushback couldn't start: #{inspect(reason)}"}
     end
+  end
+
+  defp refused(refused, loop, started?) do
+    if started?, do: shut(loop)
+    refused
   end
 
   @doc "Whether a loop is running for the conversation."

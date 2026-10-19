@@ -463,11 +463,13 @@ defmodule Bezalel.Views.Settings do
       else: "Needs your " <> Models.needs(provider)
   end
 
+  # The provider's dot sits by the model's name, so every row's label
+  # starts at the same edge (None has no dot).
   defp choice_row(label, {name, note, dot}, opts) do
     dot =
       if dot,
         do: [
-          ~MOB(<Box width={10} height={10} corner_radius={5} background={dot} fill_width={false} />)
+          ~MOB(<Box width={8} height={8} corner_radius={4} background={dot} fill_width={false} />)
         ],
         else: []
 
@@ -486,10 +488,12 @@ defmodule Bezalel.Views.Settings do
       on_tap={opts[:tap]}
     >
       <Row gap={12} align={:center} fill_width={true}>
-        {dot}
         <Column gap={2} weight={1}>
           {UI.kicker(label)}
-          <Text text={name} font={:ui_medium} text_size={15} text_color={:on_surface} />
+          <Row gap={8} align={:center} fill_width={true}>
+            {dot}
+            <Text text={name} font={:ui_medium} text_size={15} text_color={:on_surface} weight={1} />
+          </Row>
           <Text text={note} text_size={12} text_color={:muted} />
         </Column>
         <Text text="Change" font={:ui_medium} text_size={13} text_color={:secondary} />

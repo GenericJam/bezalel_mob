@@ -84,6 +84,8 @@ defmodule Bezalel.PushbackTest do
 
     view = view |> choose_critic(critic) |> render_info({:tap, {:study, :pushback}})
     assert %Reply{consult: %{model: ^critic, purpose: "critique"}} = stream(view)
+    # The status line names the critic while its critique comes.
+    assert (Pushback.label(critic) <> " is pushing back…") in texts(view)
     # Nothing to tap while it runs; Stop stops it.
     refute find(view, :box, id: "pushback-" <> reviewed.id)
     assert find(view, :box, id: "composer-stop")
@@ -197,20 +199,127 @@ defmodule Bezalel.PushbackTest do
     assert [:agent, :consult, :agent] = view |> roles() |> Enum.take(-3)
   end
 
-  test "a critic whose provider isn't signed in is named, with what to do" do
+  test "a critic whose provider isn't signed in is named, with what to do; the loop started for it goes" do
+    script([[{:text, @answer}]])
+    gemini = hd(Rho.Models.catalog(:google)).spec
+
+    view = AppScreen |> mount_screen() |> ask("Who is Bezalel?") |> until()
+    cid = assigns(view).conversation.id
+    # Choosing a critic releases the idle loop; the tap starts it again.
+    view = choose_critic(view, gemini)
+    refute Live.running?(cid)
+
+    view = render_info(view, {:tap, {:study, :pushback}})
+    assert assigns(view).toast.text =~ "#{Pushback.label(gemini)} can't push back:"
+    refute stream(view)
+    # Refused, it isn't left running untracked (with the old preferences).
+    refute Live.running?(cid)
+    assert assigns(view).sessions == %{}
+  end
+
+  test "the answer to a critique fails: the critique goes too, and the pushback can be asked for again",
+       %{critic: critic} do
+    script([
+      [{:text, @answer}],
+      [{:text, @critique}],
+      [{:error, {:other, "the lead broke"}}],
+      [{:text, @critique}],
+      [{:text, @revised}]
+    ])
+
+    view =
+      AppScreen |> mount_screen() |> choose_critic(critic) |> ask("Who is Bezalel?") |> until()
+
+    reviewed = List.last(assigns(view).messages)
+    view = view |> render_info({:tap, {:study, :pushback}}) |> until()
+
+    assert %Reply{status: :error, error: error} = stream(view)
+    assert error =~ "the lead broke"
+    # The reply it reviewed is the last again, in the chat and the session:
+    # no critique left unanswered.
+    assert List.last(assigns(view).messages).id == reviewed.id
+    refute :consult in roles(view)
+    refute Enum.any?(Library.messages(assigns(view).conversation.id), &(&1.role == :consult))
+    refute Pushback.title(critic, "critique") in texts(view)
+    # Its card asks for the pushback again, not the question.
+    assert "Ask for pushback again" in texts(view)
+    refute "Try again" in texts(view)
+
+    view = view |> render_info({:tap, {:study, :pushback}}) |> until()
+    refute stream(view)
+    assert [%{id: id}, %{role: :consult}, %{role: :agent}] = Enum.take(assigns(view).messages, -3)
+    assert id == reviewed.id
+  end
+
+  test "an answering model that can't answer now is said before any critique is asked for",
+       %{critic: critic} do
     script([[{:text, @answer}]])
     gemini = hd(Rho.Models.catalog(:google)).spec
 
     view =
-      AppScreen
-      |> mount_screen()
-      |> ask("Who is Bezalel?")
-      |> until()
-      |> choose_critic(gemini)
-      |> render_info({:tap, {:study, :pushback}})
+      AppScreen |> mount_screen() |> choose_critic(critic) |> ask("Who is Bezalel?") |> until()
 
-    assert assigns(view).toast.text =~ "#{Pushback.label(gemini)} can't push back:"
+    assert_receive {:llm_request, _question}
+
+    view =
+      view |> render_info({:tap, {:model, gemini}}) |> render_info({:tap, {:study, :pushback}})
+
+    assert assigns(view).toast.text =~ "No pushback: "
+    assert assigns(view).toast.text =~ "Gemini API key"
     refute stream(view)
+    refute_receive {:llm_request, _}, 200
+  end
+
+  test "the switch after a reply that had edits waiting: they're made first, so the pushback doesn't see them",
+       %{critic: critic} do
+    script([[{:text, @answer}], [{:text, @critique}], [{:text, @revised}]])
+
+    view = AppScreen |> mount_screen() |> choose_critic(critic)
+    cid = assigns(view).conversation.id
+    opening = hd(assigns(view).messages)
+    opening_text = opening.text || opening.blocks |> List.last() |> Map.get("text")
+    view = render_info(view, {:change, {:study, :auto_pushback}, true})
+
+    # Deleted while the reply streams: it waits for the reply's end.
+    view = ask(view, "Who is Bezalel?")
+    view = render_info(view, {:tap, {:study, {:confirm_delete, opening.id}}})
+    assert MapSet.member?(assigns(view).stale, cid)
+
+    view = until(view)
+    # Made before the pushback began.
+    refute Enum.any?(Library.messages(cid), &(&1.id == opening.id))
+    assert %Reply{consult: %{model: ^critic}} = stream(view)
+
+    view = until(view)
+    assert [:agent, :consult, :agent] = view |> roles() |> Enum.take(-3)
+    assert_receive {:llm_request, question}
+    assert user_text(question) =~ opening_text
+    assert_receive {:llm_request, %{model: ^critic}}
+    # The answer to the critique is asked without the deleted message.
+    assert_receive {:llm_request, lead}
+    assert user_text(lead) =~ "major"
+    refute user_text(lead) =~ opening_text
+  end
+
+  test "a critique that fails while edits wait: the loop goes and the edits are made",
+       %{critic: critic} do
+    script([[{:text, @answer}], [{:error, {:other, "the critic broke"}}]])
+
+    view =
+      AppScreen |> mount_screen() |> choose_critic(critic) |> ask("Who is Bezalel?") |> until()
+
+    cid = assigns(view).conversation.id
+    opening = hd(assigns(view).messages)
+
+    view = render_info(view, {:tap, {:study, :pushback}})
+    view = render_info(view, {:tap, {:study, {:confirm_delete, opening.id}}})
+    assert MapSet.member?(assigns(view).stale, cid)
+
+    view = until(view, &match?(%{type: :consult_end}, &1))
+    assert %Reply{reason: :consult_failed} = stream(view)
+    refute Live.running?(cid)
+    refute Enum.any?(Library.messages(cid), &(&1.id == opening.id))
+    assert "Ask for pushback again" in texts(view)
   end
 
   describe "Settings → Models" do

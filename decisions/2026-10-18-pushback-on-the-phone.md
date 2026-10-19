@@ -33,12 +33,18 @@ the CONSULT block, the live fold); the app chooses, shows and keeps state.
 - **The button** sits beside the last reply's speaker when
   `Pushback.offered?/2` says so, live replies only, nothing streaming. A
   refusal (no critic, critic not signed in, one round each) is
-  `Pushback.start/3`'s sentence as a toast.
+  `Pushback.start/3`'s sentence as a toast. Before the critique is asked
+  for, the answering model gets the same check as a question
+  (`UsageView.preflight/2`: a credential, a limit not used up), so a
+  critique isn't spent on an answer that can't come ("No pushback: …").
 - **`Bezalel.Agent` gains `pushback/4` and `auto/4`.** The loop is
   private to `Bezalel.Agent.Live`; the button starts a loop when the
   conversation's was released (the reviewed reply is in the session), and
-  the lead answers on the model chosen now. `auto/4` only uses a loop that
-  is still there (the one that just answered).
+  the lead answers on the model chosen now. A loop started for a pushback
+  that is then refused is shut again: the screen never tracked it, so
+  nothing else would release it and the next question would reuse it with
+  the old preferences. `auto/4` uses the loop that just answered, or
+  starts one when the screen released it first (below).
 - **A pushback is a reply of its own** in `streams`
   (`Reply.pushback/4`). The screen finishes a reply on any event that
   leaves it not running, not just `:agent_end`: a critique's
@@ -46,8 +52,16 @@ the CONSULT block, the live fold); the app chooses, shows and keeps state.
   (`:consult_failed`) keeps its stream, shown as a card ("Pushback didn't
   come", its error, Ask for pushback again, Open Settings) in place of the
   CONSULT block; it never runs `Library.drop_failed/1` or Try again,
-  because no run failed, and the loop stays for the retry. The auto
-  pushback runs only after a reply that ended with nothing queued.
+  because no run failed, and the loop stays for the retry unless edits
+  wait for it or the conversation isn't open (then it goes, as after any
+  reply). A pushback whose critique came but whose answer failed drops the
+  critique with the failed run (`Library.drop_pushback/1`): the reviewed
+  reply is last again and its card (`Usage.explain/2`'s, as any failed
+  reply's) offers Ask for pushback again, not Try again, which would find
+  no question to ask. The auto pushback runs only after a reply that
+  ended with nothing queued; edits or preference changes that waited for
+  that reply are made first (the loop is released and the pushback starts
+  a fresh one), so the critic and the answer never see a deleted message.
 - **While a pushback streams, the chat hides only what follows the
   critique.** `without_stream` treats `:consult` like `:agent`, and for a
   pushback the run starts at the critique: the reviewed reply has no user
