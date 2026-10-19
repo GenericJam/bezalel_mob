@@ -494,7 +494,7 @@ defmodule Bezalel.PushbackTest do
         |> render_info({:tap, {:tab, :settings}})
         |> render_info({:tap, {:settings, :image_models}})
 
-      # None chosen and nothing signed in: Automatic is selected, and is gpt-image.
+      # None chosen, an OpenAI key and no ChatGPT sign-in: Automatic is selected, and is gpt-image.
       assert assigns(view).study.image_model == nil
 
       assert %{props: %{border_color: :secondary}} = find(view, :box, id: "image-automatic")
