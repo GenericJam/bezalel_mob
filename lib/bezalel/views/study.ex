@@ -218,8 +218,13 @@ defmodule Bezalel.Views.Study do
 
   # The reply streaming in (or failed): its blocks, card and pictures so
   # far (a drawing among them), the messages waiting to steer it, and its
-  # error (a pushback's: its own, `failure/2`).
+  # error (a pushback's: its own, `failure/2`). A pushback whose answer
+  # failed is its card alone: the critique and the answer, with what its
+  # tools found, left the session.
   defp live(nil, _blocks, _assigns), do: []
+
+  defp live(%Reply{status: :error, consult: %{status: :ok}} = r, _blocks, assigns),
+    do: failure(r, assigns)
 
   defp live(r, blocks, assigns) do
     pseudo = live_message(r)
@@ -240,12 +245,9 @@ defmodule Bezalel.Views.Study do
   end
 
   # A live reply's blocks; a critique that never came shows as its error
-  # instead (`pushback_failure/1`), and a pushback whose answer failed as
-  # its card alone (the critique and the answer left the session).
+  # instead (`pushback_failure/1`).
   defp live_blocks(%Reply{reason: :consult_failed} = r),
     do: Enum.reject(Reply.blocks(r), &(&1["id"] == "consult"))
-
-  defp live_blocks(%Reply{status: :error, consult: %{status: :ok}}), do: []
 
   defp live_blocks(r), do: Reply.blocks(r)
 
@@ -1262,10 +1264,15 @@ defmodule Bezalel.Views.Study do
   # ask again). Its error stays in the chat where the critique would have
   # been, with a way to ask for it again; the loop stays (idle) for that,
   # unless edits wait for it or the conversation isn't open.
+  # A message sent during the critique may have started a run the screen
+  # won't follow (the stream is done): then the loop goes too, as at a
+  # limit's end. Released first, so edits made now don't take the card.
   defp finish(socket, cid, %Reply{status: :done, reason: :consult_failed} = reply) do
+    socket =
+      if reply.pending == [], do: release_if_unused(socket, cid), else: release(socket, cid)
+
     socket
     |> put_stream(cid, %{reply | pending: []})
-    |> release_if_unused(cid)
     |> unsend(cid, reply.pending)
   end
 
@@ -1345,15 +1352,22 @@ defmodule Bezalel.Views.Study do
       pushing_back(socket, cid, reply.model, critic, session_id)
     else
       {:error, socket, text} when cid == socket.assigns.conversation.id ->
-        socket |> Helpers.toast("No pushback: " <> text) |> release_if_unused(cid)
+        socket |> refusal("No pushback: " <> text) |> release_if_unused(cid)
 
       {:error, sentence} when cid == socket.assigns.conversation.id ->
-        socket |> Helpers.toast(sentence) |> release_if_unused(cid)
+        socket |> refusal(sentence) |> release_if_unused(cid)
 
       _skip ->
         release_if_unused(socket, cid)
     end
   end
+
+  # Why the switch didn't push back, unless the toast holds a delete's
+  # Undo (made as the reply ended): that stays.
+  defp refusal(%{assigns: %{toast: %{undo: undo}}} = socket, _text) when undo != nil,
+    do: socket
+
+  defp refusal(socket, text), do: Helpers.toast(socket, text)
 
   # Can the model that answers a critique answer now (`UsageView.preflight/2`,
   # as for a question)? Checked before the critique is asked for, so a
@@ -1545,7 +1559,18 @@ defmodule Bezalel.Views.Study do
 
         ops
         |> Enum.reduce(socket, &apply_edit(&2, cid, &1))
+        |> drop_settled_pushback(cid)
         |> reload_if_open(cid)
+    end
+  end
+
+  # A pushback's failure card names the reply it was about; once the
+  # session is edited that may be gone, so the card goes (the Pushback
+  # button is back on whichever reply is last, if it can be pushed back on).
+  defp drop_settled_pushback(socket, cid) do
+    case socket.assigns.streams[cid] do
+      %Reply{consult: %{}} = r -> if Reply.running?(r), do: socket, else: drop_stream(socket, cid)
+      _ -> socket
     end
   end
 
@@ -1600,6 +1625,17 @@ defmodule Bezalel.Views.Study do
 
   defp last?(messages, id), do: match?(%{id: ^id}, List.last(messages))
 
+  # A deleted last reply can be asked again when it answered a question;
+  # the answer to a critique follows the critique, which no question is.
+  # Deleting the critique too puts the Pushback button back.
+  defp asks_again?(messages, id) do
+    case Enum.reverse(messages) do
+      [%{id: ^id, role: :agent}, %{role: :consult} | _] -> false
+      [%{id: ^id, role: :agent} | _] -> true
+      _ -> false
+    end
+  end
+
   # The toast's Undo starts as the waiting delete; made now (no reply
   # streaming), it becomes the done one's.
   defp delete(socket, id) do
@@ -1620,10 +1656,7 @@ defmodule Bezalel.Views.Study do
 
         socket
         |> Socket.assign(:menu, nil)
-        |> Helpers.toast(text,
-          undo: {:pending, cid, id},
-          ask_again: m.role == :agent and last?(messages, id)
-        )
+        |> Helpers.toast(text, undo: {:pending, cid, id}, ask_again: asks_again?(messages, id))
         |> edit(cid, {:delete, [id]})
         |> Helpers.reload_messages()
     end

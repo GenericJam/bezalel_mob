@@ -222,6 +222,7 @@ defmodule Bezalel.PushbackTest do
     script([
       [{:text, @answer}],
       [{:text, @critique}],
+      [{:tool_call, "c1", "lookup_verse", %{"reference" => "Exodus 31:2-3"}}],
       [{:error, {:other, "the lead broke"}}],
       [{:text, @critique}],
       [{:text, @revised}]
@@ -241,6 +242,8 @@ defmodule Bezalel.PushbackTest do
     refute :consult in roles(view)
     refute Enum.any?(Library.messages(assigns(view).conversation.id), &(&1.role == :consult))
     refute Pushback.title(critic, "critique") in texts(view)
+    # Nor what the failed answer's tool found: that answer is gone too.
+    refute Enum.any?(texts(view), &String.starts_with?(&1, "Sources ("))
     # Its card asks for the pushback again, not the question.
     assert "Ask for pushback again" in texts(view)
     refute "Try again" in texts(view)
@@ -249,6 +252,48 @@ defmodule Bezalel.PushbackTest do
     refute stream(view)
     assert [%{id: id}, %{role: :consult}, %{role: :agent}] = Enum.take(assigns(view).messages, -3)
     assert id == reviewed.id
+  end
+
+  test "deleting the answer to a critique offers no Ask again; deleting the critique too brings the button back",
+       %{critic: critic} do
+    script([[{:text, @answer}], [{:text, @critique}], [{:text, @revised}]])
+
+    view =
+      AppScreen |> mount_screen() |> choose_critic(critic) |> ask("Who is Bezalel?") |> until()
+
+    reviewed = List.last(assigns(view).messages)
+    view = view |> render_info({:tap, {:study, :pushback}}) |> until()
+
+    assert [_, %{role: :consult}, %{role: :agent} = answer] =
+             Enum.take(assigns(view).messages, -3)
+
+    view = render_info(view, {:tap, {:study, {:delete, answer.id}}})
+    refute assigns(view).toast.ask_again
+    critique = List.last(assigns(view).messages)
+    assert critique.role == :consult
+
+    view = render_info(view, {:tap, {:study, {:delete, critique.id}}})
+    assert List.last(assigns(view).messages).id == reviewed.id
+    assert find(view, :box, id: "pushback-" <> reviewed.id)
+  end
+
+  test "a pushback's failure card goes when the reply it was about is deleted", %{critic: critic} do
+    script([[{:text, @answer}], [{:error, {:other, "the critic broke"}}]])
+
+    view =
+      AppScreen |> mount_screen() |> choose_critic(critic) |> ask("Who is Bezalel?") |> until()
+
+    reviewed = List.last(assigns(view).messages)
+
+    view =
+      view
+      |> render_info({:tap, {:study, :pushback}})
+      |> until(&match?(%{type: :consult_end}, &1))
+
+    assert "Ask for pushback again" in texts(view)
+    view = render_info(view, {:tap, {:study, {:delete, reviewed.id}}})
+    refute stream(view)
+    refute "Ask for pushback again" in texts(view)
   end
 
   test "an answering model that can't answer now is said before any critique is asked for",
@@ -299,6 +344,23 @@ defmodule Bezalel.PushbackTest do
     assert_receive {:llm_request, lead}
     assert user_text(lead) =~ "major"
     refute user_text(lead) =~ opening_text
+  end
+
+  test "the switch's refusal doesn't take the Undo of a delete made during the reply" do
+    script([[{:text, @answer}]])
+    gemini = hd(Rho.Models.catalog(:google)).spec
+
+    view = AppScreen |> mount_screen() |> choose_critic(gemini)
+    opening = hd(assigns(view).messages)
+    view = render_info(view, {:change, {:study, :auto_pushback}, true})
+
+    view = ask(view, "Who is Bezalel?")
+    view = render_info(view, {:tap, {:study, {:confirm_delete, opening.id}}})
+    view = until(view)
+
+    # Refused (Gemini isn't signed in), quietly: the delete's Undo stays.
+    refute stream(view)
+    assert %Library.Undo{} = assigns(view).toast.undo
   end
 
   test "a critique that fails while edits wait: the loop goes and the edits are made",
