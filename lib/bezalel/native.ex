@@ -24,6 +24,8 @@ defmodule Bezalel.Native do
   @callback stop_speaking(Mob.Socket.t()) :: Mob.Socket.t()
   @callback voices() :: {:ok, [map()]} | {:error, :unavailable | :unsupported}
   @callback thumbnail(Path.t(), keyword()) :: {:ok, %{path: Path.t()}} | {:error, term()}
+  @callback save_photo(Mob.Socket.t(), Path.t(), keyword()) :: Mob.Socket.t()
+  @callback action_sheet(Mob.Socket.t(), keyword()) :: Mob.Socket.t()
 
   @doc "The photo library's picker (mob_photos): `{:photos, :picked | :cancelled, …}`."
   def pick_photos(socket, opts \\ []), do: impl().pick_photos(socket, opts)
@@ -71,6 +73,15 @@ defmodule Bezalel.Native do
 
   @doc "A downscaled upright JPEG of a picture file (mob_photos), synchronous."
   def thumbnail(path, opts), do: impl().thumbnail(path, opts)
+
+  @doc """
+  Saves a picture or video file to the phone's photos (mob_photos):
+  `{:photos, :saved | :save_failed, %{path, …}}`.
+  """
+  def save_photo(socket, path, opts \\ []), do: impl().save_photo(socket, path, opts)
+
+  @doc "The platform's action sheet (`Mob.Alert.action_sheet/2`): `{:alert, action}`."
+  def action_sheet(socket, opts), do: impl().action_sheet(socket, opts)
 
   defp impl, do: Application.get_env(:bezalel, :native, Bezalel.Native.Mob)
 end
@@ -125,4 +136,10 @@ defmodule Bezalel.Native.Mob do
     # A build without mob_photos' NIF (a host run).
     e in [ErlangError, UndefinedFunctionError] -> {:error, {:unavailable, Exception.message(e)}}
   end
+
+  @impl true
+  def save_photo(socket, path, opts), do: MobPhotos.save(socket, path, opts)
+
+  @impl true
+  def action_sheet(socket, opts), do: Mob.Alert.action_sheet(socket, opts)
 end

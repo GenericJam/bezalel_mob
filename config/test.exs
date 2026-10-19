@@ -36,3 +36,8 @@ config :mob_media, engine: MobMedia.Engine.Fake
 # No naming of conversations after replies (Bezalel.Titles): the scripted
 # model answers only the replies a test scripts. The titles tests turn it on.
 config :bezalel, Bezalel.Titles, enabled: false
+
+# Saving to the phone's photos: mob_photos' host stand-in copies the file
+# into its own library dir (MobPhotos.Fake.saved/0) and answers as the
+# phone does.
+config :mob_photos, nif: MobPhotos.Fake

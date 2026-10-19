@@ -61,6 +61,8 @@
     <string>Bezalel uses the camera when you take a photo or video to study, such as a page or an inscription.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Bezalel opens your photos when you choose one to study.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Bezalel adds a picture to your photos when you choose Save, and never reads your library to do it.</string>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIApplicationSceneManifest</key>

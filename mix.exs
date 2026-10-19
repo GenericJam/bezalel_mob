@@ -60,8 +60,9 @@ defmodule Bezalel.MixProject do
       sibling(:rho, "~> 0.4"),
       # Materials: the photo library, the camera, live dictation (the
       # platform recogniser) and Whisper on the phone (recordings, dictation's
-      # fallback). Signed plugins from Hex, activated in mob.exs.
-      {:mob_photos, "~> 0.2.2"},
+      # fallback). Signed plugins from Hex, activated in mob.exs. mob_photos
+      # 0.3+: MobPhotos.save/3 (Save to the phone's photos).
+      {:mob_photos, "~> 0.3.0"},
       {:mob_camera, "~> 0.1.15"},
       {:mob_speech, "~> 0.1.1"},
       {:mob_whisper, "~> 0.1.2"},
