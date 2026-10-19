@@ -10,6 +10,7 @@ defmodule Bezalel.Models do
   """
 
   alias Rho.Auth
+  alias Rho.Models.Codex
 
   # Provider dots, from the design's model sheet.
   @dots %{
@@ -115,7 +116,7 @@ defmodule Bezalel.Models do
   def replacement("openai_codex:" <> _ = id) do
     case get(id) do
       %{id: ^id} -> nil
-      %{id: other} -> {other, Rho.Models.Codex.replaced_notice(id, other)}
+      %{id: other} -> {other, Codex.replaced_notice(id, other)}
     end
   end
 

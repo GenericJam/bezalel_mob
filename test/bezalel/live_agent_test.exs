@@ -12,6 +12,7 @@ defmodule Bezalel.LiveAgentTest do
   alias Bezalel.Test.{Browser, FakeLLM, MemoryStore}
   alias Bezalel.Views.{Helpers, Study}
   alias MobBezalel.UI
+  alias Rho.Models.Codex
 
   @lookup {:tool_call, "c1", "lookup_verse", %{"reference" => "Exodus 31:2-3"}}
 
@@ -790,7 +791,7 @@ defmodule Bezalel.LiveAgentTest do
       })
 
     Settings.put_model("openai_codex:gpt-5.5")
-    default = "openai_codex:" <> Rho.Models.Codex.default()
+    default = "openai_codex:" <> Codex.default()
     refute default == "openai_codex:gpt-5.5"
     # The picker and the labels show what replies will run on.
     assert Bezalel.Models.get("openai_codex:gpt-5.5").id == default
@@ -799,8 +800,7 @@ defmodule Bezalel.LiveAgentTest do
     view = AppScreen |> mount_screen() |> ask("Who is Bezalel?")
     assert_receive {:llm_request, %{model: ^default}}
 
-    assert assigns(view).toast.text ==
-             Rho.Models.Codex.replaced_notice("openai_codex:gpt-5.5", default)
+    assert assigns(view).toast.text == Codex.replaced_notice("openai_codex:gpt-5.5", default)
 
     assert Settings.model() == default
     view = until(view)
