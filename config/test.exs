@@ -32,3 +32,7 @@ config :bezalel, :network_state, {Bezalel.Test.Network, :state, []}
 config :bezalel, :native, Bezalel.Test.Native
 config :bezalel, :whisper, Bezalel.Test.Whisper
 config :mob_media, engine: MobMedia.Engine.Fake
+
+# No naming of conversations after replies (Bezalel.Titles): the scripted
+# model answers only the replies a test scripts. The titles tests turn it on.
+config :bezalel, Bezalel.Titles, enabled: false

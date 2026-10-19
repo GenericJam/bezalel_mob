@@ -29,7 +29,7 @@ defmodule Bezalel.Views.Study do
   """
   import Mob.Sigil
 
-  alias Bezalel.{Agent, Library, MaterialStore, Models, Native, Scripture, Settings}
+  alias Bezalel.{Agent, Library, MaterialStore, Models, Native, Scripture, Settings, Titles}
   alias Bezalel.Agent.{Card, Pushback, Reply, Storyboard}
   alias Bezalel.Study.{DB, Lexicon}
   alias Bezalel.Views.{Attach, Helpers, Images, Sources}
@@ -85,6 +85,16 @@ defmodule Bezalel.Views.Study do
             text_size={10}
             letter_spacing={1.4}
             text_color={:muted}
+            text_align="center"
+            fill_width={true}
+          />
+          <Text
+            id="study-title"
+            text={@conversation.name}
+            font={:display}
+            text_size={20}
+            line_height={1.25}
+            text_color={:on_background}
             text_align="center"
             fill_width={true}
           />
@@ -1129,8 +1139,11 @@ defmodule Bezalel.Views.Study do
           {:ok, session_id} ->
             :ok = Library.touch(cid)
             link(attachments, session_id)
+            # A new study takes its first question's name until its title comes.
+            conversation = Library.name_after(cid, text) || socket.assigns.conversation
 
             socket
+            |> Socket.assign(:conversation, conversation)
             |> Socket.assign(:sessions, Map.put(socket.assigns.sessions, session_id, cid))
             |> put_stream(cid, Reply.new(cid, model.id, session_id))
 
@@ -1281,10 +1294,12 @@ defmodule Bezalel.Views.Study do
   # end may have started a run the screen won't follow: the loop goes too.
   # A finished reply in the open conversation is read aloud when the user
   # asked for that (Settings → Voice), and pushed back on when the
-  # conversation's Pushback switch is on (`auto_pushback/3`).
+  # conversation's Pushback switch is on (`auto_pushback/3`). Every
+  # finished reply has the conversation titled again (`Bezalel.Titles`).
   defp finish(socket, cid, %Reply{status: :done, reason: reason} = reply)
        when reply.pending == [] or reason in [:max_iterations, :cost_cap] do
     socket = socket |> store(cid, reply, nil) |> read_aloud(cid, reply)
+    _ = Titles.after_reply(cid, reply, self())
 
     socket =
       if reply.pending == [], do: auto_pushback(socket, cid, reply), else: release(socket, cid)

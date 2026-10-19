@@ -21,7 +21,7 @@ defmodule Bezalel.Library do
   """
   import Ecto.Query
 
-  alias Bezalel.Agent.Storyboard
+  alias Bezalel.Agent.{Storyboard, Title}
   alias Bezalel.{Images, MaterialStore, Models, Repo}
   alias Bezalel.Library.{Conversation, Message, Tool, Transcript}
   alias Rho.Session
@@ -120,6 +120,42 @@ defmodule Bezalel.Library do
   def put_pushback(id, on?) when is_boolean(on?) do
     Repo.update_all(from(c in shelf(), where: c.id == ^id), set: [pushback: on?])
     get_conversation(id)
+  end
+
+  @doc """
+  Names a new study after its first question, while it still has the name
+  it started with (`Bezalel.Agent.Title.from_question/1`: the question's
+  first line, cut at a word); its title comes after the reply
+  (`Bezalel.Titles`). Leaves its place on the shelf alone. The
+  conversation as it is now (nil once it's off the shelf).
+  """
+  @spec name_after(integer(), String.t()) :: Conversation.t() | nil
+  def name_after(id, question) do
+    with name when is_binary(name) <- Title.from_question(question) do
+      Repo.update_all(from(c in shelf(), where: c.id == ^id and c.name == "New study"),
+        set: [name: name]
+      )
+    end
+
+    get_conversation(id)
+  end
+
+  @doc """
+  Gives the conversation the title and summary its model wrote
+  (`Bezalel.Titles`), if it still has the `count` messages they were
+  written from (a newer reply's naming follows; a delete or undo moved
+  on). Leaves its place on the shelf alone. The conversation as it is now,
+  or nil when it wasn't named (moved on, off the shelf).
+  """
+  @spec put_title(integer(), %{title: String.t(), summary: String.t()}, non_neg_integer()) ::
+          Conversation.t() | nil
+  def put_title(id, %{title: title, summary: summary}, count) do
+    query = from(c in shelf(), where: c.id == ^id and c.message_count == ^count)
+
+    case Repo.update_all(query, set: [name: title, summary: summary]) do
+      {1, _} -> get_conversation(id)
+      {0, _} -> nil
+    end
   end
 
   @doc """
