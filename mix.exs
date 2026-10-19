@@ -34,7 +34,7 @@ defmodule Bezalel.MixProject do
       {:mob_dev, "~> 0.7.29", only: :dev, runtime: false},
       # The design plugin (style package): Bezalel's themes, palette, fonts,
       # icons and composites (the composer's + / mic slots and chips).
-      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "f5d2d5b77413b6c4c69603e36461e5fea48d7268"),
+      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "ab9c546bcaddde8087ef4f1d186435d4e7a784c8"),
       # Native Markdown views (Markwon / Foundation) for replies and tool
       # results. Unreleased: pinned to a commit.
       sibling(
@@ -50,11 +50,11 @@ defmodule Bezalel.MixProject do
       sibling(
         :bezalel_core,
         "GenericJam/bezalel_core",
-        "2b9a8d25b34a4ea04d40cc55c5fcc4a863282129"
+        "bd700a426c73fb195dfa756c9e592b9fb03958a3"
       ),
       # The agent core: models, sign-in, usage, Dyn; attachments by reference
-      # (Materials) from 0.2.
-      sibling(:rho, "~> 0.2"),
+      # (Materials) from 0.2; Rho.Consult and ask_model (Pushback) from 0.3.
+      sibling(:rho, "~> 0.3"),
       # Materials: the photo library, the camera, live dictation (the
       # platform recogniser) and Whisper on the phone (recordings, dictation's
       # fallback). Signed plugins from Hex, activated in mob.exs.

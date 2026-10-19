@@ -37,12 +37,27 @@ defmodule Bezalel.Views.Helpers do
   end
 
   # A run starts with its question: what follows the last one is the run's.
-  defp without_stream(messages, %Reply{status: :running, kept: kept}) do
-    {streaming, done} = messages |> Enum.reverse() |> Enum.split_while(&(&1.role == :agent))
+  # Another model's message (`:consult`) is a reply like the agent's here.
+  defp without_stream(messages, %Reply{status: :running, kept: kept} = reply) do
+    {streaming, done} =
+      messages |> Enum.reverse() |> Enum.split_while(&(&1.role in [:agent, :consult]))
+
+    {streaming, done} =
+      if reply.consult, do: from_critique(streaming, done), else: {streaming, done}
+
     Enum.reverse(done) ++ Enum.filter(Enum.reverse(streaming), &(&1.entries -- kept == []))
   end
 
   defp without_stream(messages, _reply), do: messages
+
+  # A pushback's run starts at its critique (none yet: nothing of it is
+  # stored); the reply it reviews stays. Both lists are newest first.
+  defp from_critique(streaming, done) do
+    case Enum.split_while(streaming, &(&1.role != :consult)) do
+      {run, [critique | reviewed]} -> {run ++ [critique], reviewed ++ done}
+      {_run, []} -> {[], streaming ++ done}
+    end
+  end
 
   @doc """
   Shows a toast for four seconds (`toast_ms/0`). `opts`: `:undo` (what

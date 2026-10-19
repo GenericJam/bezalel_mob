@@ -84,17 +84,24 @@ defmodule Bezalel.LiveAgentTest do
     assert assigns(view).draft == ""
     assert_receive {:llm_request, first}
     # The study prompt for the default preferences, with the phone's
-    # formatting section.
+    # formatting section and the rule for asking another model.
     assert first.system_prompt == Live.system_prompt(%Preferences{})
 
     assert first.system_prompt ==
-             Prompt.system_prompt(%Preferences{}, surface: Live.phone_formatting())
+             Prompt.system_prompt(%Preferences{},
+               surface: Live.phone_formatting(),
+               ask_model: true
+             )
 
     assert first.system_prompt =~ "## Formatting for a phone"
     assert first.system_prompt =~ "column about 40 characters wide"
 
+    # The study tools, read_artifact and ask_model (another model, asked
+    # for in words).
     assert Enum.sort(Enum.map(first.tools, & &1.name)) ==
              Enum.sort(Enum.map(Live.tools(), & &1.name()))
+
+    assert "ask_model" in tool_names(first)
 
     # The loop starts from the conversation as stored: the seeded study.
     assert [%{role: :user} = opening | _] = first.messages

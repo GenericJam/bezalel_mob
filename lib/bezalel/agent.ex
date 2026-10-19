@@ -51,6 +51,34 @@ defmodule Bezalel.Agent do
   @callback release_all() :: :ok
 
   @doc """
+  Has `critic` (a rho model spec, Settings' "Pushback from"; nil for none)
+  push back on the conversation's last reply, and `model` answer the
+  critique (bezalel_core's `Bezalel.Agent.Pushback.start/3`, the Pushback
+  button). The events go to `subscriber`, as for `c:ask/5`. Returns the
+  loop's session id, or a sentence for the user saying why not.
+  """
+  @callback pushback(
+              conversation_id :: integer(),
+              model :: String.t(),
+              critic :: String.t() | nil,
+              subscriber :: pid()
+            ) :: {:ok, String.t()} | {:error, String.t()}
+
+  @doc """
+  The conversation's Pushback switch, after `reply` (a
+  `Bezalel.Agent.Reply`, folded through `:agent_end`) ended:
+  `Bezalel.Agent.Pushback.auto/4` on its loop, started again if the
+  screen released it (edits or preferences waited for the reply).
+  `:skip` when there's nothing to push back on.
+  """
+  @callback auto(
+              conversation_id :: integer(),
+              reply :: Bezalel.Agent.Reply.t(),
+              critic :: String.t() | nil,
+              subscriber :: pid()
+            ) :: {:ok, String.t()} | :skip | {:error, String.t()}
+
+  @doc """
   Whether replies come from a model: a live agent is configured and
   `account` (`Bezalel.Account.status/0`) has a sign-in or an API key.
   """
@@ -83,6 +111,19 @@ defmodule Bezalel.Agent do
   @doc "See the `c:release_all/0` callback; nothing without a live agent."
   @spec release_all() :: :ok
   def release_all, do: if(impl(), do: impl().release_all(), else: :ok)
+
+  @doc "See the `c:pushback/4` callback."
+  @spec pushback(integer(), String.t(), String.t() | nil, pid()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  def pushback(conversation_id, model, critic, subscriber),
+    do: impl().pushback(conversation_id, model, critic, subscriber)
+
+  @doc "See the `c:auto/4` callback; `:skip` without a live agent."
+  @spec auto(integer(), Bezalel.Agent.Reply.t(), String.t() | nil, pid()) ::
+          {:ok, String.t()} | :skip | {:error, String.t()}
+  def auto(conversation_id, reply, critic, subscriber) do
+    if impl(), do: impl().auto(conversation_id, reply, critic, subscriber), else: :skip
+  end
 
   defp impl, do: Application.get_env(:bezalel, :agent, Bezalel.Agent.Live)
 end

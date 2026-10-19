@@ -353,9 +353,13 @@ defmodule Bezalel.Views.Usage do
   @doc """
   A failed reply's card: what happened, what to do, and the buttons for
   it (Try again always; choose a model, the billing page or Settings as the
-  explanation says).
+  explanation says). `opts`: `:retry`, `{label, tap}` in place of Try
+  again (a pushback asks for itself again), and a `:note` under the
+  explanation.
   """
-  def failure(%Reply{status: :error} = r, assigns) do
+  def failure(reply, assigns, opts \\ [])
+
+  def failure(%Reply{status: :error} = r, assigns, opts) do
     error = r.error || "The reply failed."
 
     e =
@@ -364,7 +368,8 @@ defmodule Bezalel.Views.Usage do
         stored -> current(stored, r.model, assigns)
       end
 
-    buttons = [button("Try again", {self(), {:study, :retry}}) | actions(e)]
+    {label, tap} = opts[:retry] || {"Try again", {self(), {:study, :retry}}}
+    buttons = [button(label, tap) | actions(e)]
 
     UI.card(
       [
@@ -372,6 +377,7 @@ defmodule Bezalel.Views.Usage do
         ~MOB(<Text text={e.message} text_size={14} line_height={1.5} text_color={:on_surface} />)
         | detail(e)
       ] ++
+        List.wrap(note(opts[:note])) ++
         [
           ~MOB(<Wrap spacing={10} run_spacing={10} fill_width={true}>
   {buttons}
@@ -382,7 +388,7 @@ defmodule Bezalel.Views.Usage do
     )
   end
 
-  def failure(_reply, _assigns), do: []
+  def failure(_reply, _assigns, _opts), do: []
 
   # A used-up limit as it stands now: its countdown worked out again, or,
   # once the limit has lifted, a nudge to try again.

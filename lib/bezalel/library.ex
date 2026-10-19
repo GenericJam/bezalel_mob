@@ -111,6 +111,18 @@ defmodule Bezalel.Library do
   end
 
   @doc """
+  Turns the conversation's Pushback switch on or off: when on, each
+  finished reply in it is pushed back on (`Bezalel.Agent.auto/4`). Leaves
+  its place on the shelf alone. Returns the conversation as it is now (nil
+  once it's off the shelf).
+  """
+  @spec put_pushback(integer(), boolean()) :: Conversation.t() | nil
+  def put_pushback(id, on?) when is_boolean(on?) do
+    Repo.update_all(from(c in shelf(), where: c.id == ^id), set: [pushback: on?])
+    get_conversation(id)
+  end
+
+  @doc """
   Deletes a conversation: it's off the shelf now (the reads above don't
   see it, writes to it do nothing) and kept until `purge/1`, so
   `undelete/1` can put it back as it was. The conversation must have no
@@ -442,6 +454,32 @@ defmodule Bezalel.Library do
       _ -> :ok
     end
   end
+
+  @doc """
+  Drops a pushback whose answer failed: the critique (the last of another
+  model's messages) and the failed run after it, so the reply it reviewed
+  is the last again and its pushback can be asked for anew (the round
+  wasn't used). The conversation must have no loop.
+  """
+  @spec drop_pushback(integer()) :: :ok
+  def drop_pushback(conversation_id) do
+    with %Conversation{session_file: file} = c when is_binary(file) <-
+           get_conversation(conversation_id),
+         {session, branch} = open(c, Models.default()),
+         {after_rev, [critique | _]} <-
+           branch |> Enum.reverse() |> Enum.split_while(&(not critique?(&1))),
+         {parent, copies} <-
+           Transcript.delete(branch, Enum.map([critique | after_rev], & &1["id"])) do
+      {moved, added} = move(session, parent, copies)
+      written(conversation_id, moved, extend(branch, added), false)
+      :ok
+    else
+      _ -> :ok
+    end
+  end
+
+  defp critique?(%{"type" => "custom_message"} = entry), do: Session.attribution(entry) != nil
+  defp critique?(_entry), do: false
 
   # The conversation's session and its active branch.
   defp open(%Conversation{session_file: nil} = c, model) do

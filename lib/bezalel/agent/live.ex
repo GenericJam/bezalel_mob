@@ -5,7 +5,8 @@ defmodule Bezalel.Agent.Live do
   preferences, `Bezalel.Settings.study_preferences/0`, with the phone's
   formatting section, `phone_formatting/0`), the study tools
   (`Bezalel.Study.Tools.all/0`, plus rho's `read_artifact` for a result
-  too long to send whole) and the tools the user built in the Workshop
+  too long to send whole and `ask_model`, `Rho.Tools.Consult`, for when
+  the user asks for another model's view in words) and the tools the user built in the Workshop
   (the current Dyn generation's, `Rho.Dyn.Source`, from the next model
   call after one is approved or reverted), on the model chosen in Settings.
   The loop takes its tools from rho's registry, which the app starts with
@@ -39,12 +40,18 @@ defmodule Bezalel.Agent.Live do
   mounting the screen releases them all. Releasing only stops the
   process; the session stays.
 
+  **Pushback** (bezalel_core's `Bezalel.Agent.Pushback`): `pushback/4`
+  (the button) and `auto/4` (the conversation's switch, after a reply)
+  run the critic on the conversation's loop (started for it if it was
+  released, and shut again when the pushback doesn't go), so the
+  critique and the lead's answer to it stream to the screen like a reply.
+
   Loop options from `config :bezalel, Bezalel.Agent.Live` are added to
   the loop's (tests set `:llm` to a scripted model).
   """
   @behaviour Bezalel.Agent
 
-  alias Bezalel.Agent.Details
+  alias Bezalel.Agent.{Details, Pushback, Reply}
   alias Bezalel.{Library, Settings}
   alias Bezalel.Study.{Prompt, Tools}
   alias Rho.Dyn.Source
@@ -72,7 +79,8 @@ defmodule Bezalel.Agent.Live do
   (`draw_image`, which keeps its drawing in `Bezalel.MaterialStore`).
   """
   @spec tools() :: [module()]
-  def tools, do: Tools.all() ++ Tools.materials() ++ [Rho.Tools.ReadArtifact]
+  def tools,
+    do: Tools.all() ++ Tools.materials() ++ [Rho.Tools.ReadArtifact, Rho.Tools.Consult]
 
   @doc "The registry's tools Study never offers: the ones that write Dyn code."
   @spec withheld() :: [String.t()]
@@ -85,9 +93,13 @@ defmodule Bezalel.Agent.Live do
   @spec phone_formatting() :: String.t()
   def phone_formatting, do: @phone_formatting
 
-  @doc "The study system prompt for `prefs` (`Bezalel.Study.Preferences`) on the phone."
+  @doc """
+  The study system prompt for `prefs` (`Bezalel.Study.Preferences`) on the
+  phone, with the rule for asking another model (`ask_model`).
+  """
   @spec system_prompt(Bezalel.Study.Preferences.t()) :: String.t()
-  def system_prompt(prefs), do: Prompt.system_prompt(prefs, surface: @phone_formatting)
+  def system_prompt(prefs),
+    do: Prompt.system_prompt(prefs, surface: @phone_formatting, ask_model: true)
 
   @impl true
   def ask(conversation_id, text, model, subscriber, attachments) do
@@ -129,6 +141,47 @@ defmodule Bezalel.Agent.Live do
     for loop <- Registry.select(@registry, [{{:_, :"$1", :_}, [], [:"$1"]}]), do: shut(loop)
 
     :ok
+  end
+
+  @impl true
+  def pushback(conversation_id, model, critic, subscriber),
+    do: on_loop(conversation_id, model, subscriber, &Pushback.start(&1, critic))
+
+  # A loop released before the reply ended (edits or changed preferences
+  # waited for it) is started again, on the reply's model, so the
+  # pushback runs on what the session and the preferences now hold.
+  @impl true
+  def auto(_conversation_id, _reply, nil, _subscriber), do: :skip
+
+  def auto(conversation_id, %Reply{consult: nil, status: :done} = reply, critic, subscriber),
+    do: on_loop(conversation_id, reply.model, subscriber, &Pushback.auto(&1, reply, critic))
+
+  def auto(_conversation_id, _reply, _critic, _subscriber), do: :skip
+
+  # Runs `fun` on the conversation's loop, started if it was released;
+  # the lead answers the critique on the model chosen now. A loop started
+  # for a pushback that doesn't go is shut again: the screen doesn't track
+  # it, so nothing else would release it.
+  defp on_loop(conversation_id, model, subscriber, fun) do
+    started? = whereis(conversation_id) == nil
+
+    with {:ok, loop} <- loop(conversation_id, model),
+         :ok <- Loop.subscribe(loop, subscriber) do
+      # Busy: it keeps its model, and Pushback says to wait.
+      if Loop.snapshot(loop).status == :idle, do: _ = use_model(loop, model)
+
+      case fun.(loop) do
+        {:ok, _task} -> {:ok, Loop.config(loop).session.id}
+        refused -> refused(refused, loop, started?)
+      end
+    else
+      {:error, reason} -> {:error, "Pushback couldn't start: #{inspect(reason)}"}
+    end
+  end
+
+  defp refused(refused, loop, started?) do
+    if started?, do: shut(loop)
+    refused
   end
 
   @doc "Whether a loop is running for the conversation."

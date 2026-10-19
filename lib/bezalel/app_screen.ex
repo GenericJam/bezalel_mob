@@ -141,6 +141,7 @@ defmodule Bezalel.AppScreen do
     """
   end
 
+  # Expand all, and the conversation's menu (its Pushback switch).
   defp top_bar(%{tab: :study} = assigns) do
     toggle =
       UI.bar_button(
@@ -149,7 +150,13 @@ defmodule Bezalel.AppScreen do
         assigns.cover
       )
 
-    UI.top_bar("Study", assigns.cover, trailing: if(assigns.messages != [], do: toggle))
+    menu =
+      UI.bar_icon_button(:more, {self(), {:study, :conversation_menu}}, assigns.cover,
+        id: "conversation-menu"
+      )
+
+    trailing = if assigns.messages != [], do: [toggle, menu], else: [menu]
+    UI.top_bar("Study", assigns.cover, trailing: trailing)
   end
 
   defp top_bar(%{tab: :tool} = assigns) do
@@ -294,6 +301,9 @@ defmodule Bezalel.AppScreen do
 
   def handle_info({:change, :desc, value}, socket),
     do: {:noreply, Mob.Socket.assign(socket, :desc, value)}
+
+  def handle_info({:change, {:study, :auto_pushback}, on?}, socket),
+    do: Study.handle({:auto_pushback, on?}, socket)
 
   def handle_info({:change, {:settings, field}, value}, socket),
     do: {:noreply, SettingsView.change(field, value, socket)}

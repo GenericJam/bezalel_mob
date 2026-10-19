@@ -235,9 +235,23 @@ defmodule Bezalel.DesignGalleryScreen do
         UI.block(type, first, rest, MapSet.member?(open, id), {self(), {:block, id}}, kind)
       end
 
+    # Another model's message: a pushback's critique, between the reply it
+    # reviews and the answer to it.
+    critique =
+      UI.consult_block(
+        "Pushback · GPT-5",
+        "1. major: “the first person filled with the Spirit”: Genesis 41:38 says it of Joseph.",
+        "2. minor: the answer reads ḥokhmah as “wisdom” only; in Exodus 31 it is the craftsman’s skill.",
+        MapSet.member?(open, "consult"),
+        {self(), {:block, "consult"}}
+      )
+
     [UI.user_bubble("Help me prepare a sermon on Bezalel. What’s the heart of it?")] ++
       blocks ++
-      [~MOB(<Text text="Claude Sonnet" font={:ui_medium} text_size={11} text_color={:muted} />)]
+      [
+        ~MOB(<Text text="Claude Sonnet" font={:ui_medium} text_size={11} text_color={:muted} />),
+        critique
+      ]
   end
 
   defp controls_specimen do
