@@ -362,8 +362,19 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
 - Data: `Bezalel.Library`: each conversation's transcript is its rho
   session (JSONL in `Rho.Session.dir/0`, read by bezalel_core's
   `Bezalel.Library.Transcript`; Delete and Undo are branch moves), SQLite
-  keeps the shelf (name, kind, kicker, session id and file, message count)
-  and the built tools; seeds the design's Exodus 31 study on first run.
+  keeps the shelf (name, kind, kicker, session id and file, message count,
+  summary) and the built tools; seeds the design's Exodus 31 study on first run.
+  **Titles** (`Bezalel.Titles`, over bezalel_core's `Bezalel.Agent.Title`;
+  core's decisions/2026-10-19-titles.md): a new study takes its first
+  question's name (`Library.name_after/2`); after each finished reply a
+  task has the lead's provider's small model (Haiku, a GPT mini, Gemini
+  Flash-Lite, ChatGPT's Luna) write the title and a one-line summary
+  (`Library.put_title/3`, kept only if the conversation still has the
+  messages they were written from) and tells the screen `{:titled, c}`:
+  Study's header shows the title under the kicker, the Conversations tab
+  the summary under it. Errors keep the old name. Off in tests
+  (`config :bezalel, Bezalel.Titles, enabled: false`); tests:
+  `test/bezalel/titles_test.exs`.
   Deleting a conversation (its ⋯ on the Conversations tab) marks its row
   (`deleted_at`: off the shelf, writes to it do nothing) and purges it,
   with its session file and the files kept under rho's data dir for its

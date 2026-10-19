@@ -75,6 +75,7 @@ defmodule Bezalel.Views.Conversations do
       if open?, do: {:secondary, "OPEN", :secondary}, else: {:border, "SHELVED", :muted}
 
     meta = "#{c.kind} · #{Helpers.count(n, "message")}"
+    summary = if c.summary in [nil, ""], do: [], else: [summary_line(c.summary)]
     tap = {self(), {:convs, {:open, c.id}}}
     id = "conversation-#{c.id}"
     more_id = "conversation-more-#{c.id}"
@@ -109,6 +110,7 @@ defmodule Bezalel.Views.Conversations do
           <Column gap={3} weight={1}>
             {UI.kicker(Helpers.when_label(c.inserted_at))}
             <Text text={c.name} font={:display} text_size={18} text_color={:on_surface} />
+            {summary}
             <Text text={meta} text_size={12} text_color={:muted} />
           </Column>
           <Row gap={4} align={:center} fill_width={false}>
@@ -128,6 +130,30 @@ defmodule Bezalel.Views.Conversations do
       </Box>
     </Box>
     """
+  end
+
+  # The summary its model wrote with its title (`Bezalel.Titles`).
+  defp summary_line(text),
+    do: ~MOB(<Text text={text} text_size={13} line_height={1.4} text_color={:on_surface} />)
+
+  @doc """
+  A conversation got its title and summary (`Bezalel.Titles`): Study's
+  header shows it when it's the open one, and the shelf when it's on
+  screen.
+  """
+  def titled(%Library.Conversation{id: id, name: name, summary: summary}, socket) do
+    # Only the name and summary: a Pushback switch flipped meanwhile stays.
+    socket =
+      if socket.assigns.conversation.id == id,
+        do:
+          Socket.assign(socket, :conversation, %{
+            socket.assigns.conversation
+            | name: name,
+              summary: summary
+          }),
+        else: socket
+
+    Helpers.refresh(socket)
   end
 
   @doc "Handles a Conversations event."

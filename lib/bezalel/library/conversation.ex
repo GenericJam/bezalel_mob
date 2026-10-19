@@ -7,6 +7,10 @@ defmodule Bezalel.Library.Conversation do
   while a delete can still be undone (`Bezalel.Library.delete_conversation/1`):
   the conversation is off the shelf until it's purged or put back.
   `pushback` is its Pushback switch (`Bezalel.Library.put_pushback/2`).
+  `name` is its title and `summary` the line under it on the shelf, both
+  written by a small model after each finished reply (`Bezalel.Titles`);
+  before the first, the name is the first question's
+  (`Bezalel.Library.name_after/2`) and the summary nil.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -20,6 +24,7 @@ defmodule Bezalel.Library.Conversation do
     field :message_count, :integer, default: 0
     field :deleted_at, :utc_datetime_usec
     field :pushback, :boolean, default: false
+    field :summary, :string
     timestamps(type: :utc_datetime_usec)
   end
 

@@ -342,6 +342,10 @@ defmodule Bezalel.AppScreen do
   def handle_info({:purge, deleted}, socket),
     do: {:noreply, Conversations.purge(deleted, socket)}
 
+  # A conversation got its title and summary after a reply (Bezalel.Titles).
+  def handle_info({:titled, conversation}, socket),
+    do: {:noreply, Conversations.titled(conversation, socket)}
+
   def handle_info({:mob_device, :color_scheme_changed, _scheme}, socket) do
     if socket.assigns.mode == :system, do: Mob.Theme.set(MobBezalel.System)
     {:noreply, socket}
