@@ -24,17 +24,19 @@ defmodule Bezalel.MixProject do
 
   defp deps do
     [
-      # 0.9.22+: Mob.Speech.voices/0, speak by voice id and end-of-speech
+      # 0.9.24+: Mob.Theme text_scale (Settings → Text size) and zoomable
+      # :image. 0.9.22+: Mob.Speech.voices/0, speak by voice id and end-of-speech
       # events (Settings → Voice). 0.9.21+: Mob.Storage.exclude_from_backup/1 keeps the study packs out of
       # iCloud backup (bezalel-lac.3). 0.9.18+: the light/dark watcher follows
       # the OS (MOB-479) and <Scroll anchor="bottom"> renders on iOS (MOB-481).
-      {:mob, "~> 0.9.22"},
+      {:mob, "~> 0.9.24"},
       # 0.7.25+: bundles a style package's fonts (mob_bezalel's) in dev and
       # release builds (MOB-476, MOB-480).
       {:mob_dev, "~> 0.7.29", only: :dev, runtime: false},
       # The design plugin (style package): Bezalel's themes, palette, fonts,
-      # icons and composites (the composer's + / mic slots and chips).
-      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "ab9c546bcaddde8087ef4f1d186435d4e7a784c8"),
+      # icons and composites (the composer's + / mic slots and chips), and
+      # text_scale/0 / capped_size/2 for chrome that grows only to a cap.
+      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "3906242454c01f9c96e6e3a146e3c28f676e67d5"),
       # Native Markdown views (Markwon / Foundation) for replies and tool
       # results. Unreleased: pinned to a commit.
       sibling(

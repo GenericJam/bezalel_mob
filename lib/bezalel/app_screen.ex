@@ -40,7 +40,7 @@ defmodule Bezalel.AppScreen do
 
   def mount(_params, _session, socket) do
     mode = Settings.mode()
-    Mob.Theme.set(Settings.theme_module(mode))
+    Mob.Theme.set(Settings.theme(mode))
     AdaptiveWatcher.register_adaptive(MobBezalel.System)
     # System mode: re-set the theme on an OS light/dark flip so this screen
     # repaints in the new palette (the watcher updates the theme only).
@@ -77,6 +77,7 @@ defmodule Bezalel.AppScreen do
       |> Mob.Socket.assign(
         mode: mode,
         cover: Settings.cover(),
+        text_size: Settings.text_size(),
         model_id: Settings.model(),
         study: Settings.study_preferences(),
         account: Account.status(),
@@ -347,7 +348,7 @@ defmodule Bezalel.AppScreen do
     do: {:noreply, Conversations.titled(conversation, socket)}
 
   def handle_info({:mob_device, :color_scheme_changed, _scheme}, socket) do
-    if socket.assigns.mode == :system, do: Mob.Theme.set(MobBezalel.System)
+    if socket.assigns.mode == :system, do: Mob.Theme.set(Settings.theme(:system))
     {:noreply, socket}
   end
 

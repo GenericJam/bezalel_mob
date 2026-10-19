@@ -175,6 +175,67 @@ defmodule Bezalel.SettingsTest do
     end
   end
 
+  describe "text size" do
+    setup do
+      Mob.State.delete(:bezalel_text_size)
+      Mob.State.delete(:bezalel_mode)
+
+      on_exit(fn ->
+        Mob.State.delete(:bezalel_text_size)
+        Mob.State.delete(:bezalel_mode)
+        Mob.Theme.set(MobBezalel.Dark)
+      end)
+    end
+
+    test "Default until chosen; a choice is the theme's text_scale, kept across a re-mount" do
+      view = settings()
+      assert assigns(view).text_size == :default
+      assert selected?(view, {:settings, {:text_size, :default}})
+      assert Mob.Theme.current().text_scale == 1.0
+      assert find(view, :text, id: "text-size-preview")
+
+      view = render_info(view, {:tap, {:settings, {:text_size, :largest}}})
+      assert selected?(view, {:settings, {:text_size, :largest}})
+      refute selected?(view, {:settings, {:text_size, :default}})
+      assert Mob.Theme.current().text_scale == 1.5
+      assert text(view) =~ "Largest"
+      assert_renderable(view)
+
+      Mob.Theme.set(MobBezalel.Dark)
+      view = settings()
+      assert assigns(view).text_size == :largest
+      assert Mob.Theme.current().text_scale == 1.5
+    end
+
+    test "a theme change, and System mode following the phone, keep the text size" do
+      view = render_info(settings(), {:tap, {:settings, {:text_size, :small}}})
+
+      view = render_info(view, {:tap, {:settings, {:mode, :night}}})
+      assert Mob.Theme.current().background == MobBezalel.Night.theme().background
+      assert Mob.Theme.current().text_scale == 0.85
+
+      view = render_info(view, {:tap, {:settings, {:mode, :system}}})
+      _view = render_info(view, {:mob_device, :color_scheme_changed, :light})
+      assert Mob.Theme.current().text_scale == 0.85
+    end
+
+    test "the size picker's letters stay their own sizes whatever the choice" do
+      sizes = fn view ->
+        for %{type: :box, props: %{on_tap: {_, {:settings, {:text_size, _}}}}} = box <-
+              find_all(view, :box),
+            %{type: :text, props: %{text: "A", text_size: s}} <- box.children,
+            # What reaches the screen: the renderer multiplies by text_scale.
+            do: Float.round(s * Mob.Theme.current().text_scale, 6)
+      end
+
+      view = settings()
+      default = sizes.(view)
+      assert default == Enum.sort(default)
+      assert [_, _, _, _, _] = Enum.uniq(default)
+      assert sizes.(render_info(view, {:tap, {:settings, {:text_size, :largest}}})) == default
+    end
+  end
+
   describe "study" do
     test "translation, results per list and scripture labels: the defaults, then each persists across a re-mount" do
       view = settings()
