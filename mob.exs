@@ -55,7 +55,10 @@ config :mob, :plugins, [
   :mob_camera,
   :mob_speech,
   :mob_whisper,
-  :mob_media
+  :mob_media,
+  # Settings → Linked computers → Link a computer scans the website's QR
+  # code (Bezalel.LinkScan); the camera permission is mob_camera's.
+  :mob_scanner
 ]
 
 # mob_secure_store (the Keychain / Keystore rho keeps sign-ins and API keys

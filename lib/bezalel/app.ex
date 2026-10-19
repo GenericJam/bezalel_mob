@@ -31,7 +31,7 @@ defmodule Bezalel.App do
     # can't find the sign-in token and model endpoints, or the study
     # library: seed them through the platform resolver.
     for host <-
-          ~w(api.anthropic.com auth.openai.com chatgpt.com api.openai.com generativelanguage.googleapis.com bezalel.genericjam.com),
+          ~w(api.anthropic.com auth.openai.com chatgpt.com api.openai.com generativelanguage.googleapis.com bezalel.genericjam.com study.genericjam.com),
         do: Mob.DNS.resolve(host)
 
     :ok = Bezalel.Certs.install!()
@@ -63,6 +63,11 @@ defmodule Bezalel.App do
     Ecto.Migrator.with_repo(Bezalel.Repo, fn repo ->
       Ecto.Migrator.run(repo, migrations_dir(), :up, all: true)
     end)
+
+    # Linked computers: dial the websites this phone has linked computers
+    # on (Bezalel.Link; each dialer also resolves its host before connecting).
+    {:ok, _} = Bezalel.Link.start_link()
+    :ok = Bezalel.Link.resume()
 
     Mob.Screen.start_root(Bezalel.AppScreen)
     Mob.Dist.ensure_started(node: :"bezalel_android@127.0.0.1", cookie: :mob_secret)

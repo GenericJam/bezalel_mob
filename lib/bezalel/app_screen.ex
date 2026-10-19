@@ -114,7 +114,8 @@ defmodule Bezalel.AppScreen do
         speaking: nil,
         speech_pending: 0,
         read_aloud: Settings.read_aloud?(),
-        voice: Settings.voice()
+        voice: Settings.voice(),
+        linked_computers: Bezalel.Link.count()
       )
       |> Mob.Socket.assign(
         Attach.assigns() ++
@@ -287,6 +288,11 @@ defmodule Bezalel.AppScreen do
   # Settings → Voice stored a choice (`Bezalel.VoiceScreen`).
   def handle_info({:voice_chosen, voice}, socket),
     do: {:noreply, Mob.Socket.assign(socket, :voice, voice)}
+
+  # Settings → Linked computers linked or logged out a computer
+  # (`Bezalel.LinkedComputersScreen`): Settings shows the count.
+  def handle_info({:linked_computers, :changed}, socket),
+    do: {:noreply, Mob.Socket.assign(socket, :linked_computers, Bezalel.Link.count())}
 
   # The notice in Study ("Now answering with …") shows after any change of
   # model, whichever tab it was made from, until the conversation changes.

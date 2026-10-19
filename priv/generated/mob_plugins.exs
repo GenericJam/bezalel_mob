@@ -13,7 +13,8 @@
     :mob_camera_nif,
     :mob_speech_nif,
     :mob_whisper_nif,
-    :mob_media_nif
+    :mob_media_nif,
+    :mob_scanner_nif
   ],
   notification_handlers: [],
   plugins: [
@@ -23,7 +24,8 @@
     :mob_camera,
     :mob_speech,
     :mob_whisper,
-    :mob_media
+    :mob_media,
+    :mob_scanner
   ],
   screens: [
     %{

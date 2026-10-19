@@ -71,6 +71,12 @@ defmodule Bezalel.MixProject do
       # (compressed audio, a video's audio track) and a video's frames (the
       # stills). Signed, from Hex.
       {:mob_media, "~> 0.1"},
+      # Linking a computer (decisions/2026-10-19-phone-link.md): the QR
+      # scanner (CameraX + ML Kit / AVFoundation; it uses mob_camera's camera
+      # permission) and the WebSocket the phone dials the website with
+      # (Bezalel.Link.Dialer, after sloppy_joe's dial-out).
+      {:mob_scanner, "~> 0.1.7"},
+      {:mint_web_socket, "~> 1.0"},
       # The platform secure store (Keychain / Keystore) rho keeps the
       # sign-ins and API keys in. Unreleased: pinned to a commit.
       sibling(

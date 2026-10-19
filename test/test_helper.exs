@@ -69,5 +69,8 @@ end
 
 %{generation: 0, mode: :normal} = Rho.Dyn.boot()
 {:ok, _} = Bezalel.Agent.Live.start_link()
+# Linked computers: the dialers' supervisor, nothing linked (the link
+# tests start their own website, Bezalel.Test.LinkServer).
+{:ok, _} = Bezalel.Link.start_link()
 
 ExUnit.start()

@@ -92,6 +92,9 @@ defmodule Bezalel.Test.Native do
 
   @impl true
   def action_sheet(socket, opts), do: tap(socket, fn _ -> record(:action_sheet, opts) end)
+
+  @impl true
+  def scan_qr(socket), do: tap(socket, fn _ -> record(:scan_qr, nil) end)
 end
 
 defmodule Bezalel.Test.Whisper do
