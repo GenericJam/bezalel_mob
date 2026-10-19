@@ -1,7 +1,7 @@
 defmodule Bezalel.Settings do
   @moduledoc """
   The user's choices, kept in `Mob.State` (survives restarts): theme mode,
-  cover, model (a `Bezalel.Models` id), which conversation is open,
+  cover, text size, model (a `Bezalel.Models` id), which conversation is open,
   whether the study-pack download has been offered, and the study
   preferences (`Bezalel.Study.Preferences`: approach, scripture labels,
   sources switched off, results per list, translation), which bezalel_core's
@@ -15,6 +15,10 @@ defmodule Bezalel.Settings do
 
   @modes [:light, :dark, :night, :system]
   @covers [:leather, :paper]
+  # Text size → Mob's theme `text_scale`, multiplied into every text size on
+  # top of the phone's own font scale (decisions/2026-10-19-text-size.md).
+  @text_sizes [small: 0.85, default: 1.0, large: 1.15, larger: 1.3, largest: 1.5]
+  @text_size_names Keyword.keys(@text_sizes)
 
   @doc "Theme modes in the order the Theme control lists them."
   @spec modes() :: [atom()]
@@ -30,6 +34,18 @@ defmodule Bezalel.Settings do
   @spec cover() :: atom()
   def cover, do: get(:cover, :leather, @covers)
 
+  @doc "Text sizes, smallest first, in the order Settings → Appearance lists them."
+  @spec text_sizes() :: [atom()]
+  def text_sizes, do: @text_size_names
+
+  @doc "The user's text size (`:default` until chosen)."
+  @spec text_size() :: atom()
+  def text_size, do: get(:text_size, :default, @text_size_names)
+
+  @doc "The factor a text size multiplies every text size by (Mob's `text_scale`)."
+  @spec text_scale(atom()) :: float()
+  def text_scale(size \\ text_size()), do: Keyword.fetch!(@text_sizes, size)
+
   @spec model() :: String.t()
   def model, do: Mob.State.get(:bezalel_model, Bezalel.Models.default())
 
@@ -38,6 +54,10 @@ defmodule Bezalel.Settings do
 
   def put_mode(mode) when mode in @modes, do: Mob.State.put(:bezalel_mode, mode)
   def put_cover(cover) when cover in @covers, do: Mob.State.put(:bezalel_cover, cover)
+
+  def put_text_size(size) when size in @text_size_names,
+    do: Mob.State.put(:bezalel_text_size, size)
+
   def put_model(id) when is_binary(id), do: Mob.State.put(:bezalel_model, id)
   def put_conversation_id(id), do: Mob.State.put(:bezalel_conversation, id)
 
@@ -125,10 +145,16 @@ defmodule Bezalel.Settings do
   @spec update_study_preferences((Preferences.t() -> Preferences.t() | map())) :: Preferences.t()
   def update_study_preferences(fun), do: study_preferences() |> fun.() |> put_study_preferences()
 
-  @doc "The theme module for a mode."
-  @spec theme_module(atom()) :: module()
-  def theme_module(:system), do: MobBezalel.System
-  def theme_module(mode), do: MobBezalel.theme_module(mode)
+  @doc """
+  What to `Mob.Theme.set/1` for a mode: its theme module with the user's
+  text size as Mob's `text_scale`. The `{module, overrides}` form keeps the
+  text size when `MobBezalel.System` follows an OS light/dark flip.
+  """
+  @spec theme(atom()) :: {module(), keyword()}
+  def theme(mode), do: {theme_module(mode), text_scale: text_scale()}
+
+  defp theme_module(:system), do: MobBezalel.System
+  defp theme_module(mode), do: MobBezalel.theme_module(mode)
 
   defp get(key, default, allowed) do
     value = Mob.State.get(:"bezalel_#{key}", default)

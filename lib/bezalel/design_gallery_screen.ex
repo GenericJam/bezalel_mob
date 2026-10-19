@@ -7,15 +7,9 @@ defmodule Bezalel.DesignGalleryScreen do
   """
   use Mob.Screen
 
+  alias Bezalel.Settings
   alias Mob.Theme.AdaptiveWatcher
   alias MobBezalel.{Palette, UI}
-
-  @modes [
-    light: MobBezalel.Light,
-    dark: MobBezalel.Dark,
-    night: MobBezalel.Night,
-    system: MobBezalel.System
-  ]
 
   @blocks [
     {:think, "THINKING",
@@ -37,7 +31,7 @@ defmodule Bezalel.DesignGalleryScreen do
     # already showing, and a repaint racing it could keep the old palette.
     Mob.Device.subscribe(:appearance)
     mode = Mob.State.get(:bezalel_mode, :dark)
-    Mob.Theme.set(Keyword.fetch!(@modes, mode))
+    Mob.Theme.set(Settings.theme(mode))
 
     {:ok,
      Mob.Socket.assign(socket,
@@ -53,14 +47,14 @@ defmodule Bezalel.DesignGalleryScreen do
     sa = assigns[:safe_area] || %{top: 0, bottom: 0}
 
     mode_opts =
-      for {key, _mod} <- @modes,
+      for key <- Settings.modes(),
           do: {key |> Atom.to_string() |> String.capitalize(), {self(), {:mode, key}}}
 
     cover_opts =
       for c <- Palette.covers(),
           do: {c |> Atom.to_string() |> String.capitalize(), {self(), {:cover, c}}}
 
-    mode_index = Enum.find_index(@modes, fn {k, _} -> k == assigns.mode end)
+    mode_index = Enum.find_index(Settings.modes(), &(&1 == assigns.mode))
     cover_index = Enum.find_index(Palette.covers(), &(&1 == assigns.cover))
     sheet_tap = {self(), :open_sheet}
     trailing = UI.bar_button("Word", sheet_tap, assigns.cover)
@@ -131,12 +125,12 @@ defmodule Bezalel.DesignGalleryScreen do
   # The repaint after handle_info picks up the new theme: the frame
   # fingerprint covers Mob.Theme.current(), so an unchanged tree still paints.
   def handle_info({:mob_device, :color_scheme_changed, _scheme}, socket) do
-    if socket.assigns.mode == :system, do: Mob.Theme.set(MobBezalel.System)
+    if socket.assigns.mode == :system, do: Mob.Theme.set(Settings.theme(:system))
     {:noreply, socket}
   end
 
   def handle_info({:tap, {:mode, mode}}, socket) do
-    Mob.Theme.set(Keyword.fetch!(@modes, mode))
+    Mob.Theme.set(Settings.theme(mode))
     Mob.State.put(:bezalel_mode, mode)
     {:noreply, Mob.Socket.assign(socket, :mode, mode)}
   end

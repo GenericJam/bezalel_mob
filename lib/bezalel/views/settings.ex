@@ -48,7 +48,8 @@ defmodule Bezalel.Views.Settings do
           UI.segmented(mode_opts, mode_index),
           note(system_note),
           ~MOB(<Text text="Cover" font={:ui_medium} text_size={14} text_color={:on_surface} />),
-          UI.segmented(cover_opts, cover_index)
+          UI.segmented(cover_opts, cover_index),
+          text_size(assigns.text_size)
         ],
         padding: 16,
         gap: 10
@@ -98,6 +99,81 @@ defmodule Bezalel.Views.Settings do
         {sections}
       </Column>
     </Scroll>
+    """
+  end
+
+  # Text size: five "A"s drawn at the sizes they choose (divided by the
+  # current scale, which the renderer multiplies back in, so the row itself
+  # doesn't grow), the choice's name, and a line of Scripture at the chosen
+  # size so the effect shows before leaving the screen.
+  @preview "“See, I have called by name Bezalel the son of Uri, the son of Hur, of the tribe of Judah.” Exodus 31:2"
+
+  defp text_size(selected) do
+    scale = Settings.text_scale()
+    preview = @preview
+
+    options =
+      for size <- Settings.text_sizes() do
+        {bg, fg} =
+          if size == selected, do: {:secondary, :on_secondary}, else: {nil, :on_background}
+
+        glyph_size = 16 * Settings.text_scale(size) / scale
+
+        %{
+          type: :box,
+          props:
+            Map.reject(
+              %{
+                id: "text-size-#{size}",
+                background: bg,
+                corner_radius: 18,
+                height: 36,
+                weight: 1,
+                align: "center",
+                on_tap: {self(), {:settings, {:text_size, size}}},
+                accessibility_label: "Text size: #{label(size)}"
+              },
+              fn {_k, v} -> is_nil(v) end
+            ),
+          children: [
+            ~MOB(<Text text="A" font={:ui_medium} text_size={glyph_size} text_color={fg} max_lines={1} />)
+          ]
+        }
+      end
+
+    ~MOB"""
+    <Column gap={10} fill_width={true}>
+      <Row align={:center} fill_width={true}>
+        <Text text="Text size" font={:ui_medium} text_size={14} text_color={:on_surface} weight={1} />
+        <Text text={label(selected)} text_size={13} text_color={:muted} />
+      </Row>
+      <Box
+        background={:background}
+        border_color={:border}
+        border_width={1}
+        corner_radius={22}
+        padding={4}
+        fill_width={true}
+      >
+        <Row gap={4} align={:center} fill_width={true}>
+          {options}
+        </Row>
+      </Box>
+      <Text
+        id="text-size-preview"
+        text={preview}
+        font={:scripture}
+        text_size={17}
+        line_height={1.45}
+        text_color={:on_surface}
+      />
+      <Text
+        text="Applies across the app, on top of your phone’s own text size setting. The tab bar and the top bar grow less, to keep their labels whole."
+        text_size={12}
+        line_height={1.45}
+        text_color={:muted}
+      />
+    </Column>
     """
   end
 
@@ -310,7 +386,7 @@ defmodule Bezalel.Views.Settings do
             />
           </Box>
           <Column gap={2} weight={1}>
-            <Text text={who} font={:ui_medium} text_size={15} text_color={:on_surface} />
+            <Text text={who} font={:ui_medium} text_size={15} text_color={:on_surface} max_lines={1} />
             <Text text={name <> " · signed in through the browser"} text_size={12} text_color={:muted} />
           </Column>
           {UI.pill_button("Sign out", out, :outline, height: 36, fill: false, text_size: 13)}
@@ -521,8 +597,14 @@ defmodule Bezalel.Views.Settings do
   @doc "Handles a Settings event."
   def handle({:mode, mode}, socket) do
     Settings.put_mode(mode)
-    Mob.Theme.set(Settings.theme_module(mode))
+    Mob.Theme.set(Settings.theme(mode))
     {:noreply, Socket.assign(socket, :mode, mode)}
+  end
+
+  def handle({:text_size, size}, socket) do
+    Settings.put_text_size(size)
+    Mob.Theme.set(Settings.theme(socket.assigns.mode))
+    {:noreply, Socket.assign(socket, :text_size, size)}
   end
 
   def handle({:cover, cover}, socket) do

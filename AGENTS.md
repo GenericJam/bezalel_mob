@@ -286,6 +286,12 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   `MobBezalel.UI` composites (bars, cards, pills, segmented control, blocks,
   composer, sheet style). Use those; don't hard-code hex or sizes in screens.
   Fix look problems in mob_bezalel, not per screen.
+- **Text size** (Settings → Appearance; decisions/2026-10-19-text-size.md):
+  the user's choice is Mob's theme `text_scale`, which the renderer
+  multiplies into every `text_size`, so sizes stay the design's numbers.
+  Every `Mob.Theme.set/1` goes through `Bezalel.Settings.theme/1` (it
+  carries the scale). Text in fixed room (a bar, a tab, a tile, a
+  segment) uses `MobBezalel.capped_size/2`; check new screens at Largest.
 - `Bezalel.DesignGalleryScreen` (Settings → Design specimen) shows every
   plugin piece; `mix run --no-start scripts/design_tour.exs /tmp/tour <node>...`
   captures it in every theme × cover over dist.
@@ -386,7 +392,7 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   in the session) are downscaled on the phone and cached
   (`Bezalel.Images`, `Bezalel.Views.Images`, with a full-screen viewer).
   Preferences: `Bezalel.Settings`
-  (`Mob.State`; the study preferences too, below). Scripture and lexicon: `Bezalel.Scripture` (Exodus 31
+  (`Mob.State`: theme, cover, text size; the study preferences too, below). Scripture and lexicon: `Bezalel.Scripture` (Exodus 31
   sample). Models: `Bezalel.Models` (rho's catalog for the providers the
   user has access to; a model id is its req_llm spec). Sign-ins, API keys
   and rho's usage record: `Bezalel.Account`, over rho.

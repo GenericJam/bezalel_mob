@@ -184,7 +184,13 @@ defmodule Bezalel.Views.Materials do
     >
       <Column gap={8} fill_width={true}>
         {glyph}
-        <Text text={m.name} font={:ui_medium} text_size={12} text_color={:on_surface} max_lines={3} />
+        <Text
+          text={m.name}
+          font={:ui_medium}
+          text_size={MobBezalel.capped_size(12, 1.15)}
+          text_color={:on_surface}
+          max_lines={3}
+        />
       </Column>
     </Box>
     """
