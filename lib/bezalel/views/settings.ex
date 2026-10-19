@@ -427,7 +427,7 @@ defmodule Bezalel.Views.Settings do
     account = assigns.account
     model = Models.get(assigns.model_id)
     critic = assigns.study.pushback_model
-    image = Enum.find(DrawImage.models(), &(&1.id == assigns.study.image_model))
+    image = DrawImage.model(assigns.study)
 
     pushback =
       case critic && Auth.provider_for_model(critic) do
@@ -450,7 +450,8 @@ defmodule Bezalel.Views.Settings do
       ),
       choice_row(
         "Pictures by",
-        {image.label, access(image.provider, account), Models.dot(image.provider)},
+        {if(assigns.study.image_model, do: image.label, else: "Automatic: " <> image.label),
+         access(image.provider, account), Models.dot(image.provider)},
         tap: {self(), {:settings, :image_models}},
         id: "settings-images"
       )

@@ -107,8 +107,22 @@ defmodule Bezalel.Views.Sheets do
     ]
   end
 
-  # Pictures by: the models draw_image can draw with.
+  # Pictures by: Automatic (none chosen: the ChatGPT sign-in when there is
+  # one, else an image model on an API key), then the models draw_image can
+  # draw with.
   defp content(:image_models, assigns) do
+    chosen = assigns.study.image_model
+
+    automatic =
+      choice_row(%{
+        id: "image-automatic",
+        name: "Automatic: " <> DrawImage.automatic_model().label,
+        note: "Your ChatGPT sign-in when there is one, else an image model on your API key",
+        dot: nil,
+        selected: chosen == nil,
+        tap: {self(), {:settings, {:image_model, nil}}}
+      })
+
     rows =
       for m <- DrawImage.models() do
         available? = match?(%{signed_in: true}, assigns.account[m.provider])
@@ -122,12 +136,12 @@ defmodule Bezalel.Views.Sheets do
               else: "Needs your " <> Models.needs(m.provider)
             ),
           dot: Models.dot(m.provider),
-          selected: m.id == assigns.study.image_model,
+          selected: m.id == chosen,
           tap: if(available?, do: {self(), {:settings, {:image_model, m.id}}})
         })
       end
 
-    [sheet_title("Pictures by", "Draws when a reply calls for a picture") | rows]
+    [sheet_title("Pictures by", "Draws when a reply calls for a picture"), automatic | rows]
   end
 
   defp content({:delete_material, id}, _assigns) do

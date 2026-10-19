@@ -464,7 +464,10 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   finished reply and the answering model responds. Settings → Models:
   Answers, Pushback from (none by default) and Pictures by (study
   preferences `pushback_model`, `image_model`; a model whose provider
-  isn't signed in is listed, not choosable, with what it needs). The
+  isn't signed in is listed, not choosable, with what it needs; Pictures
+  by starts with Automatic (`image_model` nil: `DrawImage.automatic_model/0`,
+  the ChatGPT sign-in when there is one), shown as "Automatic: <label>":
+  bezalel_core's decisions/2026-10-18-pictures-by-chatgpt-sign-in.md). The
   switch is the conversation's (`conversations.pushback`,
   `Library.put_pushback/2`), in its menu (the ⋯ in Study's top bar,
   sheet `:conversation`); the Pushback button sits on the last reply when
