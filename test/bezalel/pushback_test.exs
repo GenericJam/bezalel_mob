@@ -296,6 +296,80 @@ defmodule Bezalel.PushbackTest do
     refute "Ask for pushback again" in texts(view)
   end
 
+  test "a pushback that fails after the reply it was about was deleted meanwhile leaves no card",
+       %{critic: critic} do
+    script([
+      [{:text, @answer}],
+      [{:error, {:other, "the critic broke"}}],
+      [{:text, @answer}],
+      [{:text, @critique}],
+      [{:error, {:other, "the lead broke"}}]
+    ])
+
+    view =
+      AppScreen |> mount_screen() |> choose_critic(critic) |> ask("Who is Bezalel?") |> until()
+
+    # Deleted while the critique comes; it fails after.
+    reviewed = List.last(assigns(view).messages)
+    view = view |> render_info({:tap, {:study, :pushback}})
+    view = render_info(view, {:tap, {:study, {:delete, reviewed.id}}})
+    view = until(view, &match?(%{type: :consult_end}, &1))
+    refute Enum.any?(Library.messages(assigns(view).conversation.id), &(&1.id == reviewed.id))
+    refute stream(view)
+    refute "Ask for pushback again" in texts(view)
+
+    # Deleted while the answer to the critique comes; it fails after.
+    view = view |> ask("Who is Bezalel?") |> until()
+    reviewed = List.last(assigns(view).messages)
+    view = render_info(view, {:tap, {:study, :pushback}})
+    view = until(view, &match?(%{type: :message_end, entry: %{"type" => "custom_message"}}, &1))
+    view = render_info(view, {:tap, {:study, {:delete, reviewed.id}}})
+    view = until(view)
+    refute Enum.any?(Library.messages(assigns(view).conversation.id), &(&1.id == reviewed.id))
+    refute stream(view)
+    refute "Ask for pushback again" in texts(view)
+  end
+
+  test "a message sent as the critique fails is answered once, not put back in the draft",
+       %{critic: critic} do
+    script([
+      [{:text, @answer}],
+      [{:error, {:other, "the critic broke"}}],
+      [{:text, "Oholiab of the tribe of Dan."}]
+    ])
+
+    view =
+      AppScreen |> mount_screen() |> choose_critic(critic) |> ask("Who is Bezalel?") |> until()
+
+    view =
+      view
+      |> render_info({:tap, {:study, :pushback}})
+      |> until(&match?(%{type: :consult_start}, &1))
+
+    # The critique's failure is on its way when the message goes in: the
+    # loop is idle while the critic works, so it starts a run at once.
+    failed =
+      receive do
+        {:rho, _, %{type: :consult_end}} = message -> message
+      after
+        2_000 -> flunk("no consult_end")
+      end
+
+    view = ask(view, "And Oholiab?")
+    view = view |> render_info(failed) |> until()
+
+    assert assigns(view).draft == ""
+    refute stream(view)
+
+    assert [%{role: :user, text: "And Oholiab?"}, %{role: :agent} = answer] =
+             Enum.take(assigns(view).messages, -2)
+
+    assert answer.blocks |> List.last() |> Map.get("text") == "Oholiab of the tribe of Dan."
+
+    assert Enum.count(assigns(view).messages, &(&1.role == :user and &1.text == "And Oholiab?")) ==
+             1
+  end
+
   test "an answering model that can't answer now is said before any critique is asked for",
        %{critic: critic} do
     script([[{:text, @answer}]])

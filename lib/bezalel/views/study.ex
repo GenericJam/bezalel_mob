@@ -1262,18 +1262,17 @@ defmodule Bezalel.Views.Study do
 
   # A pushback whose critique failed: no run failed (nothing to drop or
   # ask again). Its error stays in the chat where the critique would have
-  # been, with a way to ask for it again; the loop stays (idle) for that,
-  # unless edits wait for it or the conversation isn't open.
-  # A message sent during the critique may have started a run the screen
-  # won't follow (the stream is done): then the loop goes too, as at a
-  # limit's end. Released first, so edits made now don't take the card.
-  defp finish(socket, cid, %Reply{status: :done, reason: :consult_failed} = reply) do
-    socket =
-      if reply.pending == [], do: release_if_unused(socket, cid), else: release(socket, cid)
-
+  # been, with a way to ask for it again (`pushback_card/2`); the loop
+  # stays (idle) for that, unless edits wait for it or the conversation
+  # isn't open. A message sent during the critique was taken in at once
+  # (the loop is idle while the critic works, so a steer starts a run): the
+  # last clause below follows that run, as after any reply.
+  defp finish(socket, cid, %Reply{status: :done, reason: :consult_failed} = reply)
+       when reply.pending == [] do
     socket
-    |> put_stream(cid, %{reply | pending: []})
-    |> unsend(cid, reply.pending)
+    |> release_if_unused(cid)
+    |> put_stream(cid, reply)
+    |> pushback_card(cid)
   end
 
   # Messages sent as the run was ending: after a normal end the loop runs
@@ -1314,7 +1313,7 @@ defmodule Bezalel.Views.Study do
   # (its round wasn't used) rather than the question.
   defp finish(socket, cid, %Reply{status: :error, consult: %{status: :ok}} = reply) do
     :ok = Library.drop_pushback(cid)
-    socket |> release(cid) |> failed(cid, reply)
+    socket |> release(cid) |> failed(cid, reply) |> pushback_card(cid)
   end
 
   # Failed: the error stays in the chat, with Try again; the failed run's
@@ -1559,18 +1558,30 @@ defmodule Bezalel.Views.Study do
 
         ops
         |> Enum.reduce(socket, &apply_edit(&2, cid, &1))
-        |> drop_settled_pushback(cid)
+        |> pushback_card(cid)
         |> reload_if_open(cid)
     end
   end
 
-  # A pushback's failure card names the reply it was about; once the
-  # session is edited that may be gone, so the card goes (the Pushback
-  # button is back on whichever reply is last, if it can be pushed back on).
-  defp drop_settled_pushback(socket, cid) do
+  # A pushback's failure card asks for it again on the conversation's last
+  # reply: it stays only while that is a reply that can be pushed back on.
+  # An edit (made now, or one that waited for the pushback and was made as
+  # it ended) may have deleted the reply it was about; then it goes, and
+  # the Pushback button shows wherever it applies.
+  defp pushback_card(socket, cid) do
     case socket.assigns.streams[cid] do
-      %Reply{consult: %{}} = r -> if Reply.running?(r), do: socket, else: drop_stream(socket, cid)
-      _ -> socket
+      %Reply{consult: %{}} = r ->
+        if Reply.running?(r) or pushback_offered?(cid), do: socket, else: drop_stream(socket, cid)
+
+      _ ->
+        socket
+    end
+  end
+
+  defp pushback_offered?(cid) do
+    case Library.messages(cid) do
+      [] -> false
+      messages -> Pushback.offered?(messages, List.last(messages))
     end
   end
 

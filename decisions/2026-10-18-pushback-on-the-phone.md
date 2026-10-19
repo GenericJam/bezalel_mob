@@ -62,12 +62,20 @@ the CONSULT block, the live fold); the app chooses, shows and keeps state.
   ended with nothing queued; edits or preference changes that waited for
   that reply are made first (the loop is released and the pushback starts
   a fresh one), so the critic and the answer never see a deleted message.
-- **Edits around a pushback.** A pushback's failure card goes once the
-  session is edited (the reply it named may be gone; the Pushback button
-  covers asking again). Deleting the answer to a critique offers no Ask
-  again (it answered no question); deleting the critique as well puts the
-  button back on the reviewed reply. The switch's refusal never replaces
-  a toast holding a delete's Undo.
+- **Edits around a pushback.** A pushback's failure card stays only while
+  the conversation ends in a reply that can be pushed back on
+  (`Pushback.offered?/2` on the stored messages), checked when an edit is
+  made and when the pushback ends (a delete made while it ran waits for
+  its end): a deleted reviewed reply takes the card with it, and the
+  Pushback button shows wherever it applies.
+- **A message sent during a critique** is taken in at once (rho's loop is
+  idle while the critic works, so a steer starts a run). If the critique
+  then fails, the screen follows that run as after any reply; it never
+  puts the message back in the draft.
+- Deleting the answer to a critique offers no Ask again (it answered no
+  question); deleting the critique as well puts the button back on the
+  reviewed reply. The switch's refusal never replaces a toast holding a
+  delete's Undo.
 - **While a pushback streams, the chat hides only what follows the
   critique.** `without_stream` treats `:consult` like `:agent`, and for a
   pushback the run starts at the critique: the reviewed reply has no user
