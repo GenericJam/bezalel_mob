@@ -36,7 +36,7 @@ defmodule Bezalel.MixProject do
       # The design plugin (style package): Bezalel's themes, palette, fonts,
       # icons and composites (the composer's + / mic slots and chips), and
       # text_scale/0 / capped_size/2 for chrome that grows only to a cap.
-      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "dfac46c7ef523dd49812b5363804e416b2d3a3e9"),
+      sibling(:mob_bezalel, "GenericJam/mob_bezalel", "3906242454c01f9c96e6e3a146e3c28f676e67d5"),
       # Native Markdown views (Markwon / Foundation) for replies and tool
       # results. Unreleased: pinned to a commit.
       sibling(

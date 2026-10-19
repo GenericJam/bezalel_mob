@@ -291,7 +291,7 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   multiplies into every `text_size`, so sizes stay the design's numbers.
   Every `Mob.Theme.set/1` goes through `Bezalel.Settings.theme/1` (it
   carries the scale). Text in fixed room (a bar, a tab, a tile, a
-  segment) uses `MobBezalel.capped_size/2`; check new screens at Largest.
+  segment, a pill button) uses `MobBezalel.capped_size/2`; check new screens at Largest.
 - `Bezalel.DesignGalleryScreen` (Settings → Design specimen) shows every
   plugin piece; `mix run --no-start scripts/design_tour.exs /tmp/tour <node>...`
   captures it in every theme × cover over dist.
