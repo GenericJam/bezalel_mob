@@ -80,14 +80,23 @@ defmodule Bezalel.Models do
 
   @doc """
   A model by id, from the whole catalog (signed in or not, so a choice made
-  before signing out still has its name). An unknown id, such as one from
-  before the catalog, is the default.
+  before signing out still has its name). A ChatGPT model the sign-in no
+  longer lists is the sign-in's default (`replacement/1`: the next question
+  makes it the choice, with a toast); any other unknown id, such as one
+  from before the catalog, is the default.
   """
   @spec get(String.t() | nil) :: model()
   def get(id) when is_binary(id) do
     case Auth.provider_for_model(id) do
-      {:ok, provider} -> Enum.find(catalog(provider), &(&1.id == id)) || get(nil)
-      :error -> get(nil)
+      {:ok, :openai_codex} ->
+        models = catalog(:openai_codex)
+        Enum.find(models, &(&1.id == id)) || List.first(models) || get(nil)
+
+      {:ok, provider} ->
+        Enum.find(catalog(provider), &(&1.id == id)) || get(nil)
+
+      :error ->
+        get(nil)
     end
   end
 
@@ -95,6 +104,22 @@ defmodule Bezalel.Models do
     models = catalog(:anthropic)
     Enum.find(models, &(&1.name =~ "Sonnet")) || hd(models)
   end
+
+  @doc """
+  What a chosen ChatGPT model `id` gives way to when the sign-in no longer
+  offers it (rho's list, `Rho.Models.Codex`): `{default_id, notice}`, the
+  sign-in's default and rho's one-line notice. nil for a model still
+  offered and for other providers' models.
+  """
+  @spec replacement(String.t() | nil) :: {String.t(), String.t()} | nil
+  def replacement("openai_codex:" <> _ = id) do
+    case get(id) do
+      %{id: ^id} -> nil
+      %{id: other} -> {other, Rho.Models.Codex.replaced_notice(id, other)}
+    end
+  end
+
+  def replacement(_id), do: nil
 
   @doc """
   The catalog's model for a spec rho recorded usage under, matching an
@@ -128,13 +153,28 @@ defmodule Bezalel.Models do
 
   @doc """
   Who a message or tool is attributed to: the model's name, or "Scripted
-  reply" for the design's storyboard.
+  reply" for the design's storyboard. A model the catalog no longer has
+  (a ChatGPT model the sign-in stopped offering) is named by its id.
   """
   @spec attribution(String.t() | nil) :: String.t()
   def attribution("storyboard"), do: "Scripted reply"
-  def attribution(id), do: get(id).name
 
-  # The catalog doesn't change while the app runs: built once per provider.
+  def attribution(id) when is_binary(id) do
+    case {lookup(id), Auth.provider_for_model(id)} do
+      {%{name: name}, _} -> name
+      {nil, {:ok, _provider}} -> id |> String.split(":", parts: 2) |> List.last()
+      {nil, :error} -> get(nil).name
+    end
+  end
+
+  def attribution(nil), do: get(nil).name
+
+  # Claude's, OpenAI's and Gemini's catalogs don't change while the app
+  # runs: built once per provider. ChatGPT's is the sign-in's current list
+  # (`Rho.Models.Codex`, fetched again in the background), built each time.
+  defp catalog(:openai_codex),
+    do: Enum.map(Rho.Models.catalog(:openai_codex), &model(:openai_codex, &1))
+
   defp catalog(provider) do
     key = {__MODULE__, provider}
 

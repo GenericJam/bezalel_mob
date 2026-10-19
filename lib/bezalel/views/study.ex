@@ -822,6 +822,7 @@ defmodule Bezalel.Views.Study do
   # running, one round per reply, the answering model's limit used up or
   # no credential for it) is said as the toast.
   def handle(:pushback, socket) do
+    socket = Helpers.accept_model(socket)
     cid = socket.assigns.conversation.id
     model = Helpers.model(socket)
     critic = socket.assigns.study.pushback_model
@@ -1131,6 +1132,7 @@ defmodule Bezalel.Views.Study do
 
   defp respond_live(socket, text, attachments) do
     %{id: cid} = socket.assigns.conversation
+    socket = Helpers.accept_model(socket)
     model = Helpers.model(socket)
 
     case UsageView.preflight(socket, model) do

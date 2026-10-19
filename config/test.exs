@@ -16,7 +16,10 @@ config :logger, level: :warning
 # keychain or a browser.
 config :rho,
   credential_store: Bezalel.Test.MemoryStore,
-  open_url: {Bezalel.Test.Browser, :open, []}
+  open_url: {Bezalel.Test.Browser, :open, []},
+  # No background fetch of the ChatGPT sign-in's model list (rho's
+  # Rho.Models.Codex): tests don't reach chatgpt.com.
+  codex_models_refresh: false
 
 # The study library: nothing fetches the published manifest (the pack
 # tests serve their own, Bezalel.Test.PackServer), and the connection is

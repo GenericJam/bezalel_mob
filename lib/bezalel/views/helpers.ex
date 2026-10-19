@@ -135,6 +135,22 @@ defmodule Bezalel.Views.Helpers do
   def model(socket), do: Models.get(socket.assigns.model_id)
 
   @doc """
+  A chosen ChatGPT model the sign-in no longer offers
+  (`Bezalel.Models.replacement/1`): the sign-in's default becomes the
+  choice, with a toast saying so. Anything else is left as it is.
+  """
+  def accept_model(socket) do
+    case Models.replacement(socket.assigns.model_id) do
+      nil ->
+        socket
+
+      {id, notice} ->
+        Settings.put_model(id)
+        socket |> Socket.assign(:model_id, id) |> toast(notice)
+    end
+  end
+
+  @doc """
   Switches to `tab`, loading what it shows into assigns (renders don't
   query): the shelf, the built tools and how each is doing, or the
   on-this-phone counts. Leaving a built tool's panel stops its screen.
