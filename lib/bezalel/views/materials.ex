@@ -226,10 +226,21 @@ defmodule Bezalel.Views.Materials do
           {UI.pill_button("Ask about this", ask, :primary, weight: 1, height: 48)}
           {UI.pill_button("Delete", delete, :danger, weight: 1, height: 48)}
         </Row>
+        {save_button(m, assigns)}
       </Column>
     </Scroll>
     """
   end
+
+  # A picture (a photo, a still, a drawing) goes to the phone's photos.
+  defp save_button(%Material{kind: :image} = m, assigns) do
+    key = "material/" <> m.id
+    label = if assigns[:saving] == key, do: "Saving…", else: "Save to Photos"
+    tap = {self(), {:image, {:save, key}}}
+    [UI.pill_button(label, tap, :outline, height: 44)]
+  end
+
+  defp save_button(_m, _assigns), do: []
 
   defp preview(%Material{kind: :image} = m, assigns),
     do: Images.render([Images.material_image(m.id, m.mime)], assigns)

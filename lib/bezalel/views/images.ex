@@ -4,17 +4,22 @@ defmodule Bezalel.Views.Images do
   downscaled to the chat's width on the phone (`Bezalel.Images`) and drawn
   from the cache; a placeholder while one is made, a note when it can't
   be. Tapping one opens the viewer: the picture full-screen, made again
-  for the screen (up to twice its size), zoomed with a pinch (iOS) or a
-  double tap (both platforms), panned by scrolling. `:images` holds each
-  picture's state by `{key, size}`: `:loading`, `{:ok, ready}` or
-  `:error`; `:viewer` the picture open full-screen and its zoom.
+  for the screen (up to twice its size) and zoomed natively (mob's
+  `zoomable` image: pinch, double tap, pan while zoomed), with Save (to the
+  phone's photos, `Bezalel.Views.SavePicture`); a long press offers the
+  same. `:images` holds each picture's state by `{key, size}`:
+  `:loading`, `{:ok, ready}` or `:error`; `:viewer` the picture open
+  full-screen.
   """
   import Mob.Sigil
 
   alias Bezalel.{Images, Library}
+  alias Bezalel.Views.SavePicture
   alias Mob.Socket
   alias MobBezalel.{Icons, Palette}
 
+  # The viewer's picture is made at up to twice the screen (Bezalel.Images),
+  # so zooming past 2× shows the made pixels larger.
   @max_zoom 4.0
   @double_tap_zoom 2.5
 
@@ -93,9 +98,10 @@ defmodule Bezalel.Views.Images do
       {:ok, %{path: path, original: {w, h}}} ->
         {dw, dh} = fit(w / screen.scale, h / screen.scale, avail, 420)
         tap = {self(), {:image, {:open, key}}}
+        hold = {self(), {:image, {:menu, key}}}
 
         ~MOB"""
-        <Box id={"image-" <> key} fill_width={true} align="center" on_tap={tap}>
+        <Box id={"image-" <> key} fill_width={true} align="center" on_tap={tap} on_long_press={hold}>
           <Image src={path} width={dw} height={dh} corner_radius={14} content_mode="fit" />
         </Box>
         """
@@ -142,8 +148,7 @@ defmodule Bezalel.Views.Images do
   @doc "The full-screen viewer over everything, when a picture is open."
   def viewer(%{viewer: nil}), do: []
 
-  def viewer(%{viewer: %{key: key, zoom: zoom}} = assigns) do
-    screen = Images.screen()
+  def viewer(%{viewer: %{key: key}} = assigns) do
     sa = assigns[:safe_area] || %{top: 0, bottom: 0}
 
     ready =
@@ -153,31 +158,26 @@ defmodule Bezalel.Views.Images do
       end
 
     close = {self(), {:image, :close}}
-    zoom_tag = {self(), {:image, :zoom}}
+    save = {self(), {:image, {:save, key}}}
+    save_label = if assigns[:saving] == key, do: "Saving…", else: "Save"
     o = Palette.overlay()
+    {max_zoom, double_tap_zoom} = {@max_zoom, @double_tap_zoom}
 
     body =
       case ready do
-        %{path: path, original: {w, h}} ->
-          # Fitted to the screen by the original's size (whatever the file's).
-          {fw, fh} = fit(w, h, screen.width, screen.height - sa.top - sa.bottom - 56)
-          {dw, dh} = {Float.round(fw * zoom, 1), Float.round(fh * zoom, 1)}
-
+        %{path: path} ->
+          # The frame is the zoom viewport: the whole area under the bar, the
+          # picture fitted inside it; the zoom, pan and double tap are native.
           ~MOB"""
-          <Scroll id="viewer-v" weight={1} fill_width={true}>
-            <Scroll id="viewer-h" axis="horizontal" fill_width={true}>
-              <Box
-                id="viewer-image"
-                width={max(dw, screen.width)}
-                height={max(dh, screen.height - sa.top - sa.bottom - 56)}
-                align="center"
-                on_double_tap={zoom_tag}
-                on_pinch={zoom_tag}
-              >
-                <Image src={path} width={dw} height={dh} content_mode="fit" />
-              </Box>
-            </Scroll>
-          </Scroll>
+          <Image
+            id="viewer-image"
+            src={path}
+            zoomable={true}
+            max_zoom={max_zoom}
+            double_tap_zoom={double_tap_zoom}
+            weight={1}
+            fill_width={true}
+          />
           """
 
         nil ->
@@ -186,18 +186,28 @@ defmodule Bezalel.Views.Images do
 </Box>)
       end
 
+    # Save and Done are fill_width={false}: a Box fills its row's width by
+    # default on Android, which left the label and Done no room.
     ~MOB"""
     <Box fill_width={true} fill_height={true} background={o.popover}>
       <Column fill_width={true} fill_height={true} padding_top={sa.top} padding_bottom={sa.bottom}>
         <Row height={56} padding_left={16} padding_right={8} align={:center} fill_width={true}>
           <Text
-            text={zoom_label(zoom)}
+            text="Pinch or double-tap to zoom"
             font={:ui_medium}
             text_size={13}
             text_color={o.on_popover}
             weight={1}
           />
-          <Box id="viewer-close" padding={12} on_tap={close}>
+          <Box id="viewer-save" padding={12} fill_width={false} on_tap={save}>
+            <Text
+              text={save_label}
+              font={:ui_semibold}
+              text_size={15}
+              text_color={o.popover_action}
+            />
+          </Box>
+          <Box id="viewer-close" padding={12} fill_width={false} on_tap={close}>
             <Text text="Done" font={:ui_semibold} text_size={15} text_color={o.popover_action} />
           </Box>
         </Row>
@@ -214,49 +224,35 @@ defmodule Bezalel.Views.Images do
     end
   end
 
-  defp zoom_label(zoom) when zoom > 1.01, do: "#{Float.round(zoom, 1)}× · double-tap to fit"
-  defp zoom_label(_zoom), do: "Double-tap or pinch to zoom"
-
   # ── Events ───────────────────────────────────────────────────────────────
 
-  @doc "Handles a picture event: open, close, zoom."
+  @doc "Handles a picture event: open, close, save."
   def handle({:open, key}, socket) do
     image = find(socket, key)
 
-    socket = Socket.assign(socket, :viewer, %{key: key, zoom: 1.0, base: 1.0})
+    socket = Socket.assign(socket, :viewer, %{key: key})
     socket = if image, do: start(socket, image, :viewer), else: socket
     {:noreply, socket}
   end
 
   def handle(:close, socket), do: {:noreply, Socket.assign(socket, :viewer, nil)}
 
-  # A double tap toggles between fitting the screen and zoomed in.
-  def handle(:zoom, %{assigns: %{viewer: %{} = v}} = socket) do
-    zoom = if v.zoom > 1.01, do: 1.0, else: @double_tap_zoom
-    {:noreply, Socket.assign(socket, :viewer, %{v | zoom: zoom, base: zoom})}
-  end
+  def handle({:save, key}, socket), do: {:noreply, SavePicture.save(socket, key)}
 
   def handle(_event, socket), do: {:noreply, socket}
 
-  @doc "A pinch on the viewer's picture (`{:pinch, tag, payload}`): scales from where it began."
-  def pinch(%{scale: scale} = payload, %{assigns: %{viewer: %{} = v}} = socket) do
-    zoom = (v.base * scale) |> max(1.0) |> min(@max_zoom)
-    base = if payload[:phase] in [:ended, :cancelled], do: zoom, else: v.base
-    Socket.assign(socket, :viewer, %{v | zoom: zoom, base: base})
-  end
-
-  def pinch(_payload, socket), do: socket
-
-  # A material's picture is known by its key alone (the chat's, the
-  # Materials tab's); a session's is looked up among the messages.
-  defp find(_socket, "material/" <> id) do
+  @doc """
+  The picture known by `key`, or nil: a material's by its key alone (the
+  chat's, the Materials tab's); a session's among the messages.
+  """
+  def find(_socket, "material/" <> id) do
     case Bezalel.MaterialStore.fetch(id, %{}) do
       {:ok, m} -> material_image(m.id, m.mime)
       :error -> nil
     end
   end
 
-  defp find(socket, key) do
+  def find(socket, key) do
     stream_images = Enum.flat_map(Map.values(socket.assigns.streams), & &1.images)
 
     socket.assigns.messages

@@ -16,6 +16,7 @@ defmodule Bezalel.AppScreen do
     Conversations,
     Helpers,
     Images,
+    SavePicture,
     Sheets,
     Stills,
     Study,
@@ -116,7 +117,9 @@ defmodule Bezalel.AppScreen do
         voice: Settings.voice()
       )
       |> Mob.Socket.assign(
-        Attach.assigns() ++ MaterialsView.assigns() ++ Stills.assigns() ++ UsageView.assigns()
+        Attach.assigns() ++
+          MaterialsView.assigns() ++
+          Stills.assigns() ++ UsageView.assigns() ++ SavePicture.assigns()
       )
       |> Helpers.open_conversation(conversation)
       |> StudyLibrary.mount()
@@ -128,6 +131,8 @@ defmodule Bezalel.AppScreen do
     sa = assigns[:safe_area] || %{top: 0, bottom: 0}
     tabs = for {key, label, icon} <- @tabs, do: {label, icon, {self(), {:tab, key}}}
 
+    # The toast is drawn last, over the full-screen viewer too, so a save
+    # from the viewer shows its outcome.
     ~MOB"""
     <Box align="bottom" fill_width={true} fill_height={true} background={:background}>
       <Column fill_width={true} fill_height={true} background={:background}>
@@ -135,9 +140,9 @@ defmodule Bezalel.AppScreen do
         {body(assigns)}
         {UI.tab_bar(tabs, active_index(@tab), @cover, sa.bottom)}
       </Column>
-      {toast(@toast, @tab, sa.bottom)}
       {Sheets.render(assigns)}
       {Images.viewer(assigns)}
+      {toast(@toast, @tab, sa.bottom)}
     </Box>
     """
   end
@@ -242,6 +247,13 @@ defmodule Bezalel.AppScreen do
     do: {:noreply, Stills.move(value, socket)}
 
   def handle_info({:stills, :settle, seq}, socket), do: {:noreply, Stills.settle(seq, socket)}
+
+  # Saving a picture to the phone's photos (Bezalel.Views.SavePicture).
+  def handle_info({:permission, :media_save, result}, socket),
+    do: {:noreply, SavePicture.permission(result, socket)}
+
+  def handle_info({:photos, outcome, info}, socket) when outcome in [:saved, :save_failed],
+    do: {:noreply, SavePicture.answered(outcome, info, socket)}
 
   # The native answers for the composer: permissions, pickers, the camera,
   # the recorder, the recogniser, Whisper's model; and playback ending.
@@ -356,15 +368,19 @@ defmodule Bezalel.AppScreen do
     do: {:noreply, Study.agent_event(session_id, event, socket)}
 
   def handle_info({:tap, {:image, event}}, socket), do: Images.handle(event, socket)
-  def handle_info({:double_tap, {:image, :zoom}}, socket), do: Images.handle(:zoom, socket)
 
-  def handle_info({:pinch, {:image, :zoom}, payload}, socket),
-    do: {:noreply, Images.pinch(payload, socket)}
+  def handle_info({:long_press, {:image, {:menu, key}}}, socket),
+    do: {:noreply, SavePicture.menu(socket, key)}
+
+  def handle_info({:alert, action}, socket), do: {:noreply, SavePicture.alert(action, socket)}
 
   def handle_info(_message, socket), do: {:noreply, socket}
 
   def handle_async({:image, key, size}, result, socket),
     do: {:noreply, Images.loaded(key, size, result, socket)}
+
+  def handle_async({:save_picture, key}, result, socket),
+    do: {:noreply, SavePicture.found(key, result, socket)}
 
   def handle_async({:reply, conversation_id, _ref}, result, socket),
     do: {:noreply, Study.replied(conversation_id, result, socket)}

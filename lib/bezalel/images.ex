@@ -119,6 +119,39 @@ defmodule Bezalel.Images do
     {:ok, %{path: path, width: width, height: height, original: original}}
   end
 
+  @doc """
+  The picture at full size as a file, for saving it to the phone's photos:
+  a material's own file; a session's picture decoded from the session
+  once and kept beside its sized copies (`<entry>-<part>.original.<ext>`).
+  `{:error, reason}` when it's gone or can't be read.
+  """
+  @spec original(String.t() | nil, map()) :: {:ok, String.t()} | {:error, term()}
+  def original(_session_path, %{material: id, mime: mime}) do
+    path = Bezalel.MaterialStore.file(id, mime)
+    if File.regular?(path), do: {:ok, path}, else: {:error, :not_found}
+  end
+
+  def original(session_path, %{key: key, entry: entry, index: index, mime: mime}) do
+    [session_id | _] = String.split(key, "/")
+    found = Path.wildcard(Path.join([dir(), session_id, "#{entry}-#{index}.original.*"]))
+
+    case Enum.reject(found, &String.ends_with?(&1, ".tmp")) do
+      [path | _] ->
+        {:ok, path}
+
+      [] ->
+        with {:ok, bytes} <- read_part(session_path, entry, index) do
+          path =
+            Path.join([dir(), session_id, "#{entry}-#{index}.original" <> extension(mime, bytes)])
+
+          File.mkdir_p!(Path.dirname(path))
+          File.write!(path <> ".tmp", bytes)
+          File.rename!(path <> ".tmp", path)
+          {:ok, path}
+        end
+    end
+  end
+
   # A file made earlier at this box (any extension), with its size and the
   # original's (from its name; a file named without it, or a `.tmp` one
   # being written, doesn't count).

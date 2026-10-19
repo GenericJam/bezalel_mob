@@ -739,15 +739,20 @@ defmodule Bezalel.LiveAgentTest do
       assert_renderable(view)
 
       view = render_info(view, {:tap, {:image, {:open, key}}})
-      assert %{key: ^key, zoom: 1.0} = assigns(view).viewer
+      assert %{key: ^key} = assigns(view).viewer
       assert find(view, :box, id: "viewer-close")
       view = render_async(view)
       # The viewer's is made for the screen (twice it, for zooming): the original fits.
-      assert {:ok, %{width: 1200, height: 800}} = assigns(view).images[{key, :viewer}]
-      view = render_info(view, {:double_tap, {:image, :zoom}})
-      assert assigns(view).viewer.zoom == 2.5
-      view = render_info(view, {:pinch, {:image, :zoom}, %{scale: 4.0, phase: :ended}})
-      assert assigns(view).viewer.zoom == 4.0
+      assert {:ok, %{path: viewer_path, width: 1200, height: 800}} =
+               assigns(view).images[{key, :viewer}]
+
+      # Zoomed natively: the viewer's picture, zoomable, no zoom events.
+      image = find(view, :image, id: "viewer-image")
+
+      assert %{src: ^viewer_path, zoomable: true, max_zoom: 4.0, double_tap_zoom: 2.5} =
+               image.props
+
+      refute Map.has_key?(image.props, :on_pinch) or Map.has_key?(image.props, :on_double_tap)
       assert_renderable(view)
       view = render_info(view, {:tap, {:image, :close}})
       assert assigns(view).viewer == nil

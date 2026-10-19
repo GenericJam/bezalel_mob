@@ -391,6 +391,12 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   Pictures in the chat (a tool's, a model's, an attachment's: image parts
   in the session) are downscaled on the phone and cached
   (`Bezalel.Images`, `Bezalel.Views.Images`, with a full-screen viewer).
+  Any picture saves to the phone's photos at full size
+  (`Bezalel.Views.SavePicture` over mob_photos' `MobPhotos.save/3`: the
+  viewer's Save, a picture material's Save to Photos, a long press in the
+  chat; asks `:media_save` first; `Bezalel` album on Android;
+  decisions/2026-10-19-save-pictures-to-photos.md). Host tests run the
+  save through `MobPhotos.Fake` (`test/bezalel/save_picture_test.exs`).
   Preferences: `Bezalel.Settings`
   (`Mob.State`: theme, cover, text size; the study preferences too, below). Scripture and lexicon: `Bezalel.Scripture` (Exodus 31
   sample). Models: `Bezalel.Models` (rho's catalog for the providers the

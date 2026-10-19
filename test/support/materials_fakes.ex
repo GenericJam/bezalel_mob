@@ -80,6 +80,18 @@ defmodule Bezalel.Test.Native do
         {:error, :unavailable}
     end
   end
+
+  # Recorded, then saved for real through mob_photos with its host
+  # stand-in (`config :mob_photos, nif: MobPhotos.Fake` in config/test.exs),
+  # which answers {:photos, :saved | :save_failed, …} as the phone does.
+  @impl true
+  def save_photo(socket, path, opts) do
+    record(:save_photo, {path, opts})
+    MobPhotos.save(socket, path, opts)
+  end
+
+  @impl true
+  def action_sheet(socket, opts), do: tap(socket, fn _ -> record(:action_sheet, opts) end)
 end
 
 defmodule Bezalel.Test.Whisper do
