@@ -29,6 +29,7 @@ defmodule Bezalel.MaterialStore do
   import Ecto.Query
 
   alias Bezalel.Images.Codec
+  alias Bezalel.Link.Wire
   alias Bezalel.Materials
   alias Bezalel.Materials.Material
   alias Bezalel.{Native, Repo}
@@ -139,6 +140,72 @@ defmodule Bezalel.MaterialStore do
     end
   end
 
+  @doc "Imports a verified staged upload without loading its bytes into the BEAM."
+  def put_file(%Material{} = material, source, ctx) do
+    dest = path(material)
+
+    with {:ok, %File.Stat{type: :regular, size: size}} <- File.lstat(source),
+         true <- size == material.size,
+         {:ok, digest} <- file_digest(source),
+         true <- digest == material.id,
+         :ok <- File.mkdir_p(Path.dirname(dest)),
+         :ok <- install_file(source, dest, material.id) do
+      kept =
+        case Repo.get(Row, material.id) do
+          nil -> material
+          row -> Materials.merge(to_material(row), material)
+        end
+
+      Repo.insert!(to_row(kept),
+        on_conflict: {:replace, [:derived_from, :derivation]},
+        conflict_target: :id
+      )
+
+      link(kept.id, ctx[:session_id])
+      {:ok, kept}
+    else
+      _ -> {:error, :id_mismatch}
+    end
+  end
+
+  defp install_file(source, dest, id) do
+    case File.lstat(dest) do
+      {:ok, %File.Stat{type: :regular}} ->
+        case file_digest(dest) do
+          {:ok, ^id} -> :ok
+          _ -> {:error, :id_mismatch}
+        end
+
+      {:error, :enoent} ->
+        File.rename(source, dest)
+
+      _ ->
+        {:error, :id_mismatch}
+    end
+  end
+
+  defp file_digest(path) do
+    case File.open(path, [:read, :raw, :binary]) do
+      {:ok, io} ->
+        try do
+          digest_chunks(io, :crypto.hash_init(:sha256))
+        after
+          File.close(io)
+        end
+
+      error ->
+        error
+    end
+  end
+
+  defp digest_chunks(io, state) do
+    case :file.read(io, 262_144) do
+      {:ok, bytes} -> digest_chunks(io, :crypto.hash_update(state, bytes))
+      :eof -> {:ok, Base.encode16(:crypto.hash_final(state), case: :lower)}
+      {:error, _} = error -> error
+    end
+  end
+
   @impl true
   def fetch(id, _ctx) when is_binary(id) do
     case Repo.get(Row, id) do
@@ -155,6 +222,52 @@ defmodule Bezalel.MaterialStore do
       do: File.read(path(m)),
       else: {:error, :not_found}
   end
+
+  @doc "Reads one bounded chunk of a stored material, refusing symlinks in its path."
+  @spec read_chunk(Material.t(), non_neg_integer(), map()) ::
+          {:ok, binary(), boolean()} | {:error, :not_found | :bad_request | :read_failed}
+  def read_chunk(%Material{} = material, from, _ctx)
+      when is_integer(from) and from >= 0 do
+    file = path(material)
+    folder = Path.dirname(file)
+
+    with {:ok, %File.Stat{type: :directory}} <- File.lstat(dir()),
+         {:ok, %File.Stat{type: :directory}} <- File.lstat(folder),
+         {:ok, %File.Stat{type: :regular} = before} <- File.lstat(file),
+         true <- before.size == material.size,
+         {:ok, io} <- File.open(file, [:read, :raw, :binary]) do
+      try do
+        with {:ok, record} <- :file.read_file_info(io),
+             %File.Stat{type: :regular} = opened <- File.Stat.from_record(record),
+             true <- same_file?(before, opened) and from <= opened.size,
+             {:ok, ^from} <- :file.position(io, from),
+             {:ok, bytes} <- material_chunk(:file.read(io, Wire.chunk_size())) do
+          {:ok, bytes, from + byte_size(bytes) == opened.size}
+        else
+          false -> {:error, :bad_request}
+          _ -> {:error, :read_failed}
+        end
+      after
+        File.close(io)
+      end
+    else
+      {:error, :enoent} -> {:error, :not_found}
+      {:ok, _} -> {:error, :not_found}
+      false -> {:error, :read_failed}
+      _ -> {:error, :read_failed}
+    end
+  end
+
+  def read_chunk(%Material{}, _from, _ctx), do: {:error, :bad_request}
+
+  defp material_chunk({:ok, bytes}), do: {:ok, bytes}
+  defp material_chunk(:eof), do: {:ok, ""}
+  defp material_chunk(_), do: {:error, :read_failed}
+
+  defp same_file?(first, second),
+    do:
+      first.inode == second.inode and first.major_device == second.major_device and
+        first.minor_device == second.minor_device and first.size == second.size
 
   @impl true
   def derivatives(id, _ctx) do

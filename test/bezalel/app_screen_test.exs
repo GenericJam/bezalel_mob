@@ -52,6 +52,36 @@ defmodule Bezalel.AppScreenTest do
     assert text(view) =~ "ḥokmâ"
   end
 
+  test "a computer answering the open study blocks each phone start with a visible reason" do
+    view = mount_screen(AppScreen)
+    uid = assigns(view).conversation.session_id
+    before = length(assigns(view).messages)
+
+    view =
+      render_info(view, {:bezalel_link, "https://study.example", {:conversation_hold, uid, true}})
+
+    view = render_info(view, {:change, :draft, "What does skill mean?"})
+
+    for action <- [:send, :retry, :ask_again, :pushback] do
+      view = render_info(view, {:tap, {:study, action}})
+      assert assigns(view).toast.text == "Your computer is answering in this conversation."
+      assert assigns(view).draft == "What does skill mean?"
+      assert length(assigns(view).messages) == before
+      refute Helpers.replying?(assigns(view))
+    end
+
+    view =
+      render_info(
+        view,
+        {:bezalel_link, "https://study.example", {:conversation_hold, uid, false}}
+      )
+
+    view = render_info(view, {:tap, {:study, :send}})
+    assert Helpers.replying?(assigns(view))
+    view = render_async(view)
+    assert length(assigns(view).messages) == before + 2
+  end
+
   test "a reply lands in the conversation it was asked in, even after switching away" do
     view = mount_screen(AppScreen)
     study = assigns(view).conversation

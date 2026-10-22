@@ -51,6 +51,7 @@ defmodule Bezalel.AppScreen do
     # (re)started reports here from now on.
     :ok = Rho.Auth.subscribe()
     :ok = Rho.Usage.subscribe()
+    :ok = Bezalel.Link.subscribe()
     login = Login.pending()
     # Loops left by an earlier run of this screen answer to nobody now; the
     # next question starts one from the conversation as stored.
@@ -289,8 +290,50 @@ defmodule Bezalel.AppScreen do
   def handle_info({:voice_chosen, voice}, socket),
     do: {:noreply, Mob.Socket.assign(socket, :voice, voice)}
 
-  # Settings → Linked computers linked or logged out a computer
-  # (`Bezalel.LinkedComputersScreen`): Settings shows the count.
+  # The link process is independent of the Linked computers screen, so the
+  # Settings count follows approvals, server revocations and reconnects even
+  # when that child screen is closed.
+  def handle_info({:bezalel_link, _origin, {:sessions, _sessions}}, socket),
+    do: {:noreply, Mob.Socket.assign(socket, :linked_computers, Bezalel.Link.count())}
+
+  # A linked computer wrote into the phone's canonical shelf. Keep the open
+  # Study and the Conversations tab in sync without changing the selected
+  # chat, and let go of the conversation's loop, which would otherwise write
+  # its next turn off its own last entry (`Study.session_changed/2`).
+  def handle_info({:bezalel_link, _origin, {:conversation_changed, id}}, socket) do
+    socket = socket |> Study.session_changed(id) |> Conversations.load()
+
+    socket =
+      if socket.assigns.conversation.id == id do
+        case Library.get_conversation(id) do
+          nil ->
+            socket
+
+          conversation ->
+            socket |> Mob.Socket.assign(:conversation, conversation) |> Helpers.reload_messages()
+        end
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # A linked computer deleted a conversation: the phone has purged it.
+  def handle_info({:bezalel_link, _origin, {:conversation_removed, id}}, socket),
+    do: {:noreply, Conversations.removed(socket, id)}
+
+  # A website answered or released this chat. Only the selected conversation
+  # changes the composer; other holds are looked up when they are opened.
+  def handle_info({:bezalel_link, _origin, {:conversation_hold, uid, held?}}, socket) do
+    socket =
+      if socket.assigns.conversation.session_id == uid,
+        do: Mob.Socket.assign(socket, :web_held, held?),
+        else: socket
+
+    {:noreply, socket}
+  end
+
   def handle_info({:linked_computers, :changed}, socket),
     do: {:noreply, Mob.Socket.assign(socket, :linked_computers, Bezalel.Link.count())}
 

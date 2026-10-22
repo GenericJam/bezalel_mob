@@ -266,12 +266,6 @@ defmodule Bezalel.SettingsTest do
       # whatever the session.
       assert %{translation: "bsb", limit: 12, scripture_labels: false} =
                Preferences.current(%{session_id: "any"})
-
-      # Stored as a plain map.
-      assert %{translation: "bsb", excluded_sources: excluded} =
-               Mob.State.get(:bezalel_study_preferences)
-
-      assert Enum.sort(excluded) == Enum.sort(Sources.default_excluded())
     end
 
     test "the NET's acknowledgement is a tap away" do

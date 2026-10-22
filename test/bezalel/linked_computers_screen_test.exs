@@ -7,8 +7,8 @@ defmodule Bezalel.LinkedComputersScreenTest do
   @moduletag :screen
 
   alias Bezalel.{AppScreen, Link, LinkedComputersScreen}
-  alias Bezalel.Link.{Pairing, Store}
-  alias Bezalel.Test.{LinkServer, Native}
+  alias Bezalel.Link.{Identity, Pairing, Store}
+  alias Bezalel.Test.{LinkServer, MemoryStore, Native}
 
   @origin "https://study.example"
   @browser %{
@@ -21,6 +21,7 @@ defmodule Bezalel.LinkedComputersScreenTest do
   setup do
     stop_dialers()
     Store.clear()
+    MemoryStore.delete("bezalel.link.device_key")
     Native.reset()
 
     on_exit(fn ->
@@ -76,6 +77,7 @@ defmodule Bezalel.LinkedComputersScreenTest do
     assert "Firefox on Linux" in texts(view)
     assert "Toronto, CA · 203.0.113.7" in texts(view)
     assert shows?(view, "Only continue if you opened study.example on your computer yourself")
+    assert Identity.fingerprint() in texts(view)
     assert Link.count() == 0
 
     view = view |> render_info({:tap, :approve}) |> render_async(5_000)
@@ -111,6 +113,17 @@ defmodule Bezalel.LinkedComputersScreenTest do
 
     view = view |> render_info({:tap, :scan}) |> render_info({:permission, :camera, :denied})
     assert shows?(view, "needs the camera to scan the code")
+  end
+
+  test "scanner results other than QR codes are never treated as link requests" do
+    server = LinkServer.start(@origin)
+    view = mounted()
+
+    view =
+      render_info(view, {:scan, :result, %{type: :aztec, value: code(server)}})
+
+    assert shows?(view, "isn't a QR code")
+    assert LinkServer.frames(server) == []
   end
 
   test "the list shows each computer; Log out drops it here and on the website" do
@@ -153,7 +166,7 @@ defmodule Bezalel.LinkedComputersScreenTest do
     assert shows?(view, "None. Use Bezalel on a computer through this phone.")
 
     Store.put_sessions(@origin, [%{"id" => "a"}, %{"id" => "b"}])
-    view = render_info(view, {:linked_computers, :changed})
+    view = render_info(view, {:bezalel_link, @origin, {:sessions, Store.sessions(@origin)}})
     assert "2 computers" in texts(view)
 
     view = render_info(view, {:tap, {:settings, :linked_computers}})

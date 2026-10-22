@@ -7,7 +7,8 @@ defmodule Bezalel.LiveAgentTest do
 
   alias Bezalel.Agent.{Live, Reply}
   alias Bezalel.{AppScreen, Library, Repo, Settings}
-  alias Bezalel.Library.{Conversation, Tool}
+  alias Bezalel.Library.{Conversation, Tool, Transcript}
+  alias Bezalel.Link.Serve
   alias Bezalel.Study.{Preferences, Prompt}
   alias Bezalel.Test.{Browser, FakeLLM, MemoryStore}
   alias Bezalel.Views.{Helpers, Study}
@@ -654,6 +655,51 @@ defmodule Bezalel.LiveAgentTest do
     refute "First answer." in texts
     assert ["First?", "Second?"] == Enum.take(texts, -2)
     assert block(List.last(assigns(view).messages).blocks, "SUMMARY")["first"] == "Second answer."
+  end
+
+  test "a conversation a computer deletes lets go of its idle loop and leaves the screen" do
+    script([[{:text, "First answer."}]])
+
+    view = AppScreen |> mount_screen() |> ask("First?") |> until()
+    assert_receive {:llm_request, _}
+    assert loop?(view)
+    cid = assigns(view).conversation.id
+    uid = Library.get_conversation(cid).session_id
+
+    assert {:ok, ^cid} = Serve.delete(%{"uid" => uid})
+
+    view =
+      render_info(view, {:bezalel_link, "https://study.example", {:conversation_removed, cid}})
+
+    refute Live.running?(cid)
+    refute assigns(view).conversation.id == cid
+    refute Enum.any?(assigns(view).shelf, &(&1.conversation.id == cid))
+    refute Map.has_key?(assigns(view).streams, cid)
+  end
+
+  test "a computer's turn written while the loop idles is in the next question's context" do
+    script([[{:text, "First answer."}], [{:text, "Second answer."}]])
+
+    view = AppScreen |> mount_screen() |> ask("First?") |> until()
+    assert_receive {:llm_request, _}
+    assert loop?(view)
+
+    # The website holds the conversation, appends its turn and lets go.
+    cid = assigns(view).conversation.id
+    path = Library.session_path(cid)
+    {:ok, session, _branch} = Rho.Session.open(path, "anthropic/claude-sonnet-4-5")
+
+    {_session, _} = Rho.Session.append(session, Transcript.user("From the computer?"))
+
+    view =
+      render_info(view, {:bezalel_link, "https://study.example", {:conversation_changed, cid}})
+
+    refute loop?(view)
+
+    _view = view |> ask("Second?") |> until()
+    assert_receive {:llm_request, second}
+    texts = for m <- second.messages, part <- m.content, do: part.text
+    assert ["First?", "First answer.", "From the computer?", "Second?"] == Enum.take(texts, -4)
   end
 
   test "Undo after a delete puts the reply back, for the agent too" do

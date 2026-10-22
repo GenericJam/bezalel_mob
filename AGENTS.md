@@ -431,7 +431,10 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   browser, IP and place before Link. One dialer per website with linked
   computers (or a pairing), reconnecting with backoff in the foreground,
   closed 30 s into the background; Log out works offline (sent on the
-  next connect). Host tests run against a fake website
+  next connect). A website's writes to a conversation and the phone's
+  own (Study's turns, `Bezalel.Link.Turns.phone_turn/2`; `Library`
+  edits) take that conversation's lock (`Bezalel.Link.Serve.locked/2`;
+  the decision's 2026-10-22 section). Host tests run against a fake website
   (`test/support/link_server.ex`). On a device a scan can be stood in
   for over dist: `Mob.Test.send_message(node, {:scan, :result, %{type:
   :qr, value: qr_text}})` with the screen open. A hot push (`mix

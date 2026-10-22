@@ -13,8 +13,7 @@ defmodule Bezalel.Link.Identity do
   key": making a new one then would be a new account.
   """
 
-  alias Bezalel.Link.Handshake
-  alias Bezalel.Link.Pairing
+  alias Bezalel.Link.{Handshake, Pairing, Store}
 
   @key "bezalel.link.device_key"
 
@@ -35,15 +34,23 @@ defmodule Bezalel.Link.Identity do
         decode(encoded)
 
       :error ->
-        {_pub, priv} = pair = Handshake.keypair()
-
-        case store.put(@key, Base.encode64(priv)) do
-          :ok -> {:ok, pair}
-          {:error, _} = error -> error
-        end
+        create_key_unless_linked(store)
 
       {:error, _} = error ->
         error
+    end
+  end
+
+  defp create_key_unless_linked(store) do
+    if linked_state?() do
+      {:error, :device_key_missing}
+    else
+      {_pub, priv} = pair = Handshake.keypair()
+
+      case store.put(@key, Base.encode64(priv)) do
+        :ok -> {:ok, pair}
+        {:error, _} = error -> error
+      end
     end
   end
 
@@ -60,6 +67,14 @@ defmodule Bezalel.Link.Identity do
       _none_or_error ->
         nil
     end
+  end
+
+  # Mob.State can survive a secure-store reset/restore. Making a fresh key
+  # in that case would silently strand the existing phone account.
+  defp linked_state? do
+    Enum.any?(Store.all(), fn {_origin, entry} ->
+      entry.server_key != nil or entry.sessions != [] or entry.revokes != []
+    end)
   end
 
   defp decode(encoded) do

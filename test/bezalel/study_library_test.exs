@@ -4,7 +4,8 @@ defmodule Bezalel.StudyLibraryTest do
   # library for each test.
   @moduletag :screen
 
-  alias Bezalel.{AppScreen, AttributionsScreen, Packs}
+  alias Bezalel.{AppScreen, AttributionsScreen, Packs, Repo}
+  alias Bezalel.Library.Conversation
   alias Bezalel.Test.{Browser, MemoryStore, PackServer}
   alias Bezalel.Views.StudyLibrary
 
@@ -19,6 +20,10 @@ defmodule Bezalel.StudyLibraryTest do
     # "Remove" buttons.
     MemoryStore.clear()
     Mob.State.delete(:bezalel_study_preferences)
+    # Nor its conversations: the screen opens the latest (one with a block
+    # Study can't draw, such as TitlesTest's, failed the first-launch test).
+    Repo.delete_all(Conversation)
+    Mob.State.delete(:bezalel_conversation)
 
     # This test's library replaces the last one's.
     :ok = Packs.subscribe()

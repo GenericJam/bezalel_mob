@@ -12,15 +12,23 @@ defmodule Bezalel.Link.Store do
       it (`welcome`, `sessions.changed`), shown offline
     * `:revokes`: log-outs made while offline (a session id, or `"all"`),
       sent on the next connect
+    * `:work`: the website announced a work parcel (`work_count` in
+      `welcome`) not yet delivered in full (`work.done`); only for a
+      pinned key, and forgotten with the pin
 
-  The phone dials an origin while it has sessions or log-outs to send
-  (`dial?/1`).
+  The phone dials an origin while it has sessions, log-outs to send or a
+  work parcel to receive (`dial?/1`).
   """
 
   @key :bezalel_link
 
   @type session :: %{String.t() => term()}
-  @type entry :: %{server_key: binary() | nil, sessions: [session()], revokes: [String.t()]}
+  @type entry :: %{
+          :server_key => binary() | nil,
+          :sessions => [session()],
+          :revokes => [String.t()],
+          optional(:work) => boolean()
+        }
 
   @doc "Every origin the phone knows, with its entry."
   @spec all() :: %{String.t() => entry()}
@@ -42,21 +50,50 @@ defmodule Bezalel.Link.Store do
   @spec revokes(String.t()) :: [String.t()]
   def revokes(origin), do: (get(origin) || %{})[:revokes] || []
 
-  @doc "Does the phone dial `origin`? While it has linked computers or log-outs to send."
+  @doc "Is a work parcel from `origin` still to be received?"
+  @spec work?(String.t()) :: boolean()
+  def work?(origin), do: (get(origin) || %{})[:work] == true
+
+  @doc """
+  Does the phone dial `origin`? While it has linked computers, log-outs to
+  send or a work parcel to receive.
+  """
   @spec dial?(String.t()) :: boolean()
-  def dial?(origin), do: sessions(origin) != [] or revokes(origin) != []
+  def dial?(origin), do: sessions(origin) != [] or revokes(origin) != [] or work?(origin)
 
   @doc "The origins to dial (`dial?/1`)."
   @spec to_dial() :: [String.t()]
   def to_dial, do: for({origin, _} <- all(), dial?(origin), do: origin)
 
-  @doc "Pins `server_key` for `origin` (the first link, or a re-link with nothing linked)."
+  @doc """
+  Pins `server_key` for `origin` (the first link, or a re-link with nothing
+  linked). A work parcel announced under another key is forgotten.
+  """
   @spec pin(String.t(), binary()) :: :ok
-  def pin(origin, server_key), do: update(origin, &%{&1 | server_key: server_key})
+  def pin(origin, server_key) do
+    update(origin, fn entry ->
+      work = entry.server_key == server_key and Map.get(entry, :work, false)
+      Map.merge(entry, %{server_key: server_key, work: work})
+    end)
+  end
 
   @doc "Drops `origin`'s pinned key (a re-link after the website's key changed, with nothing linked there)."
   @spec unpin(String.t()) :: :ok
-  def unpin(origin), do: update(origin, &%{&1 | server_key: nil})
+  def unpin(origin), do: update(origin, &Map.merge(&1, %{server_key: nil, work: false}))
+
+  @doc """
+  Records whether the website pinned for `origin` has a work parcel still to
+  deliver. Ignored for an origin with no pinned key: a parcel is only
+  dialled for under the key it was announced by.
+  """
+  @spec put_work(String.t(), boolean()) :: :ok
+  def put_work(origin, pending?) when is_boolean(pending?) do
+    cond do
+      work?(origin) == pending? -> :ok
+      server_key(origin) == nil -> :ok
+      true -> update(origin, &Map.put(&1, :work, pending?))
+    end
+  end
 
   @doc """
   The website's list for `origin`, as it sent it, less any log-out not yet

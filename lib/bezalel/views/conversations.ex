@@ -219,6 +219,30 @@ defmodule Bezalel.Views.Conversations do
     end
   end
 
+  @doc """
+  A linked computer deleted conversation `id` (its row and session are
+  already purged): its loop goes, the shelf follows, and if it was the open
+  one the latest left opens instead (a new study when none is), on the tab
+  the user is on.
+  """
+  def removed(socket, id) do
+    socket = Study.let_go(socket, id)
+
+    socket =
+      if socket.assigns.conversation.id == id,
+        do: open_here(socket, latest_or_new()),
+        else: socket
+
+    load(socket)
+  end
+
+  defp latest_or_new do
+    with nil <- Library.latest_conversation() do
+      {:ok, c} = new_study()
+      c
+    end
+  end
+
   # The loop goes first (a delete writes nothing to the session, but the
   # purge removes it); the open one gives way to the latest left, or to a
   # new study when there's none. `instead` is what was opened in its

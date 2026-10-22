@@ -86,7 +86,7 @@ defmodule Bezalel.LinkedComputersScreen do
     UI.card(
       [
         text(
-          "Use Bezalel on a computer: open study.genericjam.com there, choose Link your phone, and scan the code it shows. Your sign-ins and conversations stay on this phone.",
+          "Use Bezalel on a computer: open study.genericjam.com there, choose Link your phone, and scan the code it shows. Your sign-ins and conversations live on this phone; sign-ins are shared over an encrypted link with the website's memory while you're connected.",
           14,
           :on_surface
         ),
@@ -193,6 +193,12 @@ defmodule Bezalel.LinkedComputersScreen do
         detail("Browser", info["browser"] || "Unknown"),
         detail("Where", if(where == [], do: "Unknown", else: Enum.join(where, " · "))),
         detail("Asked", ago(nil, info["requested_at"]) || "Just now"),
+        detail("This phone", assigns.fingerprint || "Unknown"),
+        text(
+          "The computer will ask \"Is this your phone?\" and show #{assigns.fingerprint || "this phone's code"}. Choose Link this browser there only if it matches.",
+          13,
+          :muted
+        ),
         text(
           "Only continue if you opened #{host} on your computer yourself, just now. Linking lets that computer use Bezalel as you, with your sign-ins, until you log it out here.",
           13,
@@ -261,7 +267,8 @@ defmodule Bezalel.LinkedComputersScreen do
   def handle_info({:permission, :camera, _denied}, socket),
     do: {:noreply, note_is(socket, camera_note())}
 
-  def handle_info({:scan, :result, %{value: text}}, socket) when is_binary(text) do
+  def handle_info({:scan, :result, %{type: type, value: text}}, socket)
+      when type in [:qr, "qr"] and is_binary(text) do
     case Link.parse(text) do
       {:ok, offer} ->
         {:noreply,
@@ -277,6 +284,9 @@ defmodule Bezalel.LinkedComputersScreen do
          )}
     end
   end
+
+  def handle_info({:scan, :result, _other}, socket),
+    do: {:noreply, note_is(socket, "That isn't a QR code. Scan the square Bezalel code.")}
 
   def handle_info({:scan, :cancelled}, socket), do: {:noreply, socket}
 
@@ -329,7 +339,13 @@ defmodule Bezalel.LinkedComputersScreen do
   def handle_info(_other, socket), do: {:noreply, socket}
 
   def handle_async(:claim, {:ok, {:ok, info}}, socket),
-    do: {:noreply, Mob.Socket.assign(socket, phase: :confirm, info: info)}
+    do:
+      {:noreply,
+       Mob.Socket.assign(socket,
+         phase: :confirm,
+         info: info,
+         fingerprint: Identity.fingerprint()
+       )}
 
   def handle_async(:claim, {:ok, {:error, reason}}, socket),
     do: {:noreply, failed(socket, reason)}

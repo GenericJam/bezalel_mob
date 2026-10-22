@@ -31,6 +31,7 @@ defmodule Bezalel.Views.Study do
 
   alias Bezalel.{Agent, Library, MaterialStore, Models, Native, Scripture, Settings, Titles}
   alias Bezalel.Agent.{Card, Pushback, Reply, Storyboard}
+  alias Bezalel.Link.Turns
   alias Bezalel.Study.{DB, Lexicon}
   alias Bezalel.Views.{Attach, Helpers, Images, Sources}
   alias Bezalel.Views.Materials, as: MaterialsView
@@ -67,6 +68,10 @@ defmodule Bezalel.Views.Study do
 
     composer_opts =
       Keyword.update(stop ++ Attach.composer_opts(assigns), :above, meter, &(meter ++ &1))
+      |> Keyword.put(
+        :send_enabled,
+        not assigns.web_held and (String.trim(assigns.draft) != "" or assigns.attachments != [])
+      )
 
     ~MOB"""
     <Column weight={1} fill_width={true}>
@@ -139,6 +144,14 @@ defmodule Bezalel.Views.Study do
           </Box>
         </Column>
       </Scroll>
+      <Text
+        :if={@web_held}
+        text="Answering on your computer…"
+        font={:ui_medium}
+        text_size={13}
+        text_color={:muted}
+        padding_left={16}
+      />
       {UI.composer(@draft, "Ask about this passage…", draft_change, send_tap, composer_opts)}
     </Column>
     """
@@ -773,6 +786,9 @@ defmodule Bezalel.Views.Study do
       text == "" and a.attachments == [] ->
         {:noreply, socket}
 
+      a.web_held or Turns.held?(a.conversation.session_id) ->
+        {:noreply, Helpers.toast(socket, "Your computer is answering in this conversation.")}
+
       composer_busy?(a) ->
         {:noreply, socket}
 
@@ -810,9 +826,17 @@ defmodule Bezalel.Views.Study do
     cid = socket.assigns.conversation.id
 
     cond do
-      Reply.running?(socket.assigns.streams[cid]) -> {:noreply, socket}
-      socket.assigns.preparing != nil -> {:noreply, still_sending(socket, "Try again")}
-      true -> {:noreply, respond(socket)}
+      socket.assigns.web_held or Turns.held?(socket.assigns.conversation.session_id) ->
+        {:noreply, Helpers.toast(socket, "Your computer is answering in this conversation.")}
+
+      Reply.running?(socket.assigns.streams[cid]) ->
+        {:noreply, socket}
+
+      socket.assigns.preparing != nil ->
+        {:noreply, still_sending(socket, "Try again")}
+
+      true ->
+        {:noreply, respond(socket)}
     end
   end
 
@@ -828,6 +852,9 @@ defmodule Bezalel.Views.Study do
     critic = socket.assigns.study.pushback_model
 
     cond do
+      socket.assigns.web_held or Turns.held?(socket.assigns.conversation.session_id) ->
+        {:noreply, Helpers.toast(socket, "Your computer is answering in this conversation.")}
+
       Reply.running?(socket.assigns.streams[cid]) ->
         {:noreply, Helpers.toast(socket, "Wait for the answer to finish, then ask for pushback.")}
 
@@ -835,14 +862,7 @@ defmodule Bezalel.Views.Study do
         {:noreply, still_sending(socket, "Ask for pushback")}
 
       true ->
-        with :ok <- lead_ready(socket, model, critic),
-             {:ok, session_id} <- Agent.pushback(cid, model.id, critic, self()) do
-          {:noreply,
-           socket |> Socket.assign(:menu, nil) |> pushing_back(cid, model.id, critic, session_id)}
-        else
-          {:error, socket, text} -> {:noreply, Helpers.toast(socket, "No pushback: " <> text)}
-          {:error, sentence} -> {:noreply, Helpers.toast(socket, sentence)}
-        end
+        start_pushback(socket, cid, model, critic)
     end
   end
 
@@ -931,6 +951,9 @@ defmodule Bezalel.Views.Study do
 
   def handle(:ask_again, socket) do
     cond do
+      socket.assigns.web_held or Turns.held?(socket.assigns.conversation.session_id) ->
+        {:noreply, Helpers.toast(socket, "Your computer is answering in this conversation.")}
+
       socket.assigns.preparing != nil ->
         {:noreply, still_sending(socket, "Ask again", ask_again: true)}
 
@@ -1021,6 +1044,11 @@ defmodule Bezalel.Views.Study do
       cid != nil and cid != open and mode == :again ->
         Helpers.toast(socket, "It wasn't asked again: you'd moved on. Try again from there.")
 
+      socket.assigns.web_held or Turns.held?(conversation.session_id) ->
+        socket
+        |> Socket.assign(:draft, text)
+        |> Helpers.toast("Your computer is answering in this conversation.")
+
       mode == :again ->
         again(socket, attachments)
 
@@ -1041,13 +1069,7 @@ defmodule Bezalel.Views.Study do
     if Agent.live?(socket.assigns.account) do
       socket |> respond_live(text, attachments) |> Helpers.reload_messages()
     else
-      socket = release(socket, cid)
-
-      {:ok, _} =
-        Library.add_message(conversation, %{role: :user, text: text, attachments: attachments})
-
-      link(attachments, Library.get_conversation(cid))
-      socket |> Helpers.reload_messages() |> respond_scripted()
+      respond_scripted(socket, {text, attachments, conversation})
     end
   end
 
@@ -1120,13 +1142,64 @@ defmodule Bezalel.Views.Study do
     end
   end
 
-  defp again(socket, attachments) do
-    cid = socket.assigns.conversation.id
-    socket = socket |> release(cid) |> drop_stream(cid)
+  defp start_pushback(socket, cid, model, critic) do
+    with :ok <- lead_ready(socket, model, critic),
+         {:ok, session, _} <- Library.session(cid, model.id),
+         :ok <- Turns.phone_turn(session.id, :start) do
+      case Agent.pushback(cid, model.id, critic, self()) do
+        {:ok, session_id} ->
+          {:noreply,
+           socket
+           |> Socket.assign(:menu, nil)
+           |> pushing_back(cid, model.id, critic, session_id)}
 
-    case Library.take_question(cid) do
-      {:ok, text} -> socket |> respond_live(text, attachments) |> Helpers.reload_messages()
-      :none -> Helpers.reload_messages(socket)
+        {:error, sentence} ->
+          Turns.phone_turn(session.id, :finish)
+          {:noreply, Helpers.toast(socket, sentence)}
+      end
+    else
+      {:error, :held_by_web} ->
+        {:noreply, Helpers.toast(socket, "Your computer is answering in this conversation.")}
+
+      {:error, socket, text} ->
+        {:noreply, Helpers.toast(socket, "No pushback: " <> text)}
+
+      {:error, sentence} ->
+        {:noreply, Helpers.toast(socket, sentence)}
+    end
+  end
+
+  defp again(socket, attachments) do
+    if socket.assigns.web_held or Turns.held?(socket.assigns.conversation.session_id) do
+      Helpers.toast(socket, "Your computer is answering in this conversation.")
+    else
+      cid = socket.assigns.conversation.id
+
+      socket
+      |> release(cid)
+      |> drop_stream(cid)
+      |> Helpers.accept_model()
+      |> again_turn(cid, attachments)
+    end
+  end
+
+  defp again_turn(socket, cid, attachments) do
+    with {:ok, session, _} <- Library.session(cid, Helpers.model(socket).id),
+         :ok <- Turns.phone_turn(session.id, :start) do
+      case Library.take_question(cid) do
+        {:ok, text} ->
+          socket |> respond_live(text, attachments) |> Helpers.reload_messages()
+
+        :none ->
+          Turns.phone_turn(session.id, :finish)
+          Helpers.reload_messages(socket)
+      end
+    else
+      {:error, :held_by_web} ->
+        Helpers.toast(socket, "Your computer is answering in this conversation.")
+
+      {:error, reason} ->
+        Helpers.toast(socket, "The conversation couldn't open: #{inspect(reason)}")
     end
   end
 
@@ -1135,31 +1208,48 @@ defmodule Bezalel.Views.Study do
     socket = Helpers.accept_model(socket)
     model = Helpers.model(socket)
 
-    case UsageView.preflight(socket, model) do
-      :ok ->
-        case Agent.ask(cid, text, model.id, self(), attachments) do
-          {:ok, session_id} ->
-            :ok = Library.touch(cid)
-            link(attachments, session_id)
-            # A new study takes its first question's name until its title comes.
-            conversation = Library.name_after(cid, text) || socket.assigns.conversation
+    with {:ok, session, _branch} <- Library.session(cid, model.id),
+         :ok <- Turns.phone_turn(session.id, :start) do
+      case UsageView.preflight(socket, model) do
+        :ok ->
+          ask_live(socket, cid, model, text, attachments)
 
-            socket
-            |> Socket.assign(:conversation, conversation)
-            |> Socket.assign(:sessions, Map.put(socket.assigns.sessions, session_id, cid))
-            |> put_stream(cid, Reply.new(cid, model.id, session_id))
+        # No credential for the model, or its limit is used up: said
+        # before sending, with what to do.
+        {:error, socket, error} ->
+          socket
+          |> keep_question(cid, text, attachments)
+          |> put_stream(cid, Reply.failed(cid, model.id, error))
+      end
+    else
+      {:error, :held_by_web} ->
+        socket
+        |> Socket.assign(:draft, text)
+        |> Helpers.toast("Your computer is answering in this conversation.")
 
-          {:error, reason} ->
-            error = "The agent couldn't start: #{inspect(reason)}"
+      {:error, reason} ->
+        socket
+        |> Socket.assign(:draft, text)
+        |> Helpers.toast("The conversation couldn't open: #{inspect(reason)}")
+    end
+  end
 
-            socket
-            |> keep_question(cid, text, attachments)
-            |> put_stream(cid, Reply.failed(cid, model.id, error))
-        end
+  defp ask_live(socket, cid, model, text, attachments) do
+    case Agent.ask(cid, text, model.id, self(), attachments) do
+      {:ok, session_id} ->
+        :ok = Library.touch(cid)
+        link(attachments, session_id)
+        # A new study takes its first question's name until its title comes.
+        conversation = Library.name_after(cid, text) || socket.assigns.conversation
 
-      # No credential for the model, or its limit is used up: said
-      # before sending, with what to do.
-      {:error, socket, error} ->
+        socket
+        |> Socket.assign(:conversation, conversation)
+        |> Socket.assign(:sessions, Map.put(socket.assigns.sessions, session_id, cid))
+        |> put_stream(cid, Reply.new(cid, model.id, session_id))
+
+      {:error, reason} ->
+        error = "The agent couldn't start: #{inspect(reason)}"
+
         socket
         |> keep_question(cid, text, attachments)
         |> put_stream(cid, Reply.failed(cid, model.id, error))
@@ -1168,7 +1258,7 @@ defmodule Bezalel.Views.Study do
 
   # A question no loop took in stays in the conversation, for Try again.
   defp keep_question(socket, cid, text, attachments) do
-    socket = release(socket, cid)
+    :ok = Agent.release(cid)
 
     with %Library.Conversation{} = conversation <- Library.get_conversation(cid),
          {:ok, _} <-
@@ -1176,22 +1266,52 @@ defmodule Bezalel.Views.Study do
       link(attachments, Library.get_conversation(cid))
     end
 
-    socket
+    release(socket, cid)
   end
 
-  defp respond_scripted(socket) do
+  defp respond_scripted(socket, question \\ nil) do
     %{id: conversation_id} = socket.assigns.conversation
-    messages = socket.assigns.messages
     model = Helpers.model(socket)
-    replying = Map.update(socket.assigns.replying, conversation_id, 1, &(&1 + 1))
-    # A loop left from before a sign-out would miss the scripted replies.
-    socket
-    |> release(conversation_id)
-    |> Socket.assign(:replying, replying)
-    |> Socket.start_async({:reply, conversation_id, make_ref()}, fn ->
-      {model.id, Storyboard.reply(messages, model)}
-    end)
+    # Any old idle loop must go before taking the new turn's hold.
+    socket = release(socket, conversation_id)
+
+    with {:ok, session, _} <- Library.session(conversation_id, model.id),
+         :ok <- Turns.phone_turn(session.id, :start) do
+      socket = ask_scripted(socket, conversation_id, question)
+
+      messages = socket.assigns.messages
+      replying = Map.update(socket.assigns.replying, conversation_id, 1, &(&1 + 1))
+
+      socket
+      |> Socket.assign(:replying, replying)
+      |> Socket.start_async({:reply, conversation_id, make_ref()}, fn ->
+        {model.id, Storyboard.reply(messages, model)}
+      end)
+    else
+      {:error, :held_by_web} ->
+        socket
+        |> keep_draft(question)
+        |> Helpers.toast("Your computer is answering in this conversation.")
+
+      {:error, reason} ->
+        Helpers.toast(socket, "The conversation couldn't open: #{inspect(reason)}")
+    end
   end
+
+  defp ask_scripted(socket, _conversation_id, nil), do: socket
+
+  defp ask_scripted(socket, conversation_id, {text, attachments, conversation}) do
+    {:ok, _} =
+      Library.add_message(conversation, %{role: :user, text: text, attachments: attachments})
+
+    link(attachments, Library.get_conversation(conversation_id))
+    Helpers.reload_messages(socket)
+  end
+
+  defp keep_draft(socket, {text, _attachments, _conversation}),
+    do: Socket.assign(socket, :draft, text)
+
+  defp keep_draft(socket, nil), do: socket
 
   @doc "Stores a scripted reply (`handle_async({:reply, conversation_id, _}, ...)`)."
   def replied(conversation_id, result, socket) do
@@ -1227,6 +1347,12 @@ defmodule Bezalel.Views.Study do
       _failed when current? -> Helpers.toast(socket, "No reply this time.", ask_again: true)
       _failed -> socket
     end
+    |> then(fn socket ->
+      if c = Library.get_conversation(conversation_id),
+        do: Turns.phone_turn(c.session_id, :finish)
+
+      socket
+    end)
   end
 
   @doc """
@@ -1236,7 +1362,12 @@ defmodule Bezalel.Views.Study do
   def agent_event(session_id, event, socket) do
     with cid when cid != nil <- socket.assigns.sessions[session_id],
          %Reply{status: :running, session_id: ^session_id} = reply <- socket.assigns.streams[cid] do
-      on_event(cid, reply, event, socket)
+      socket = on_event(cid, reply, event, socket)
+
+      if not Reply.running?(socket.assigns.streams[cid]),
+        do: Turns.phone_turn(session_id, :finish)
+
+      socket
     else
       _ -> socket
     end
@@ -1364,11 +1495,18 @@ defmodule Bezalel.Views.Study do
     with %Library.Conversation{pushback: true} <- Library.get_conversation(cid),
          nil <- reply.consult,
          :ok <- lead_ready(socket, Models.get(reply.model), critic),
+         {:ok, session, _} <- Library.session(cid, reply.model),
+         :ok <- Turns.phone_turn(session.id, :start),
          {:ok, session_id} <- Agent.auto(cid, reply, critic, self()) do
       pushing_back(socket, cid, reply.model, critic, session_id)
     else
       {:error, socket, text} when cid == socket.assigns.conversation.id ->
         socket |> refusal("No pushback: " <> text) |> release_if_unused(cid)
+
+      {:error, :held_by_web} when cid == socket.assigns.conversation.id ->
+        socket
+        |> refusal("Your computer is answering in this conversation.")
+        |> release_if_unused(cid)
 
       {:error, sentence} when cid == socket.assigns.conversation.id ->
         socket |> refusal(sentence) |> release_if_unused(cid)
@@ -1477,6 +1615,24 @@ defmodule Bezalel.Views.Study do
       else: socket
   end
 
+  @doc """
+  A linked computer wrote to conversation `cid`'s session. Its loop keeps
+  its leaf in memory and would branch off it, leaving the computer's turn
+  out of the chat and the model's context: an idle loop goes now (the
+  next question starts one from the file), a streaming one when its reply
+  ends.
+  """
+  def session_changed(socket, cid) do
+    cond do
+      cid not in Map.values(socket.assigns.sessions) -> socket
+      Reply.running?(socket.assigns.streams[cid]) -> mark_stale(socket, cid)
+      true -> release(socket, cid)
+    end
+  end
+
+  defp mark_stale(socket, cid),
+    do: Socket.assign(socket, :stale, MapSet.put(socket.assigns.stale, cid))
+
   # A delete or an undo (`op`) rewrites the session, which a loop must not
   # be holding: with no reply streaming the loop goes and it's done now;
   # otherwise it waits for the reply to end (the chat already hides a
@@ -1558,6 +1714,7 @@ defmodule Bezalel.Views.Study do
   # then the edits that waited for it are made.
   defp release(socket, cid) do
     :ok = Agent.release(cid)
+    if c = Library.get_conversation(cid), do: Turns.phone_turn(c.session_id, :finish)
     sessions = Map.reject(socket.assigns.sessions, fn {_, c} -> c == cid end)
 
     socket

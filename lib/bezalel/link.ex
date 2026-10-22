@@ -8,9 +8,12 @@ defmodule Bezalel.Link do
   account: its device key (`Bezalel.Link.Identity`).
 
   A supervisor: one `Bezalel.Link.Dialer` per website with linked
-  computers (or a pairing under way), named in a registry, plus a registry
-  of subscribers. `resume/0` (at start) dials the websites the phone has
-  linked. What the phone remembers: `Bezalel.Link.Store`.
+  computers (or a pairing under way), named in a registry, a registry of
+  subscribers, and `Bezalel.Link.Turns` (the phone's turns and the
+  websites' holds). `resume/0` (at start) dials the websites the phone has
+  linked. What the phone remembers: `Bezalel.Link.Store`. At start the
+  uploads an app killed mid-transfer left staged are swept
+  (`Bezalel.Link.Serve.sweep/0`).
 
   Events for `subscribe/0`rs: `{:bezalel_link, origin, {:status, status}}`
   (`t:Bezalel.Link.Dialer.status/0`) and `{:bezalel_link, origin,
@@ -18,7 +21,7 @@ defmodule Bezalel.Link do
   """
   use Supervisor
 
-  alias Bezalel.Link.{Dialer, Identity, Pairing, Store, Wire}
+  alias Bezalel.Link.{Creds, Dialer, Identity, Pairing, Serve, Store, Turns, Wire}
 
   @dialers __MODULE__.Dialers
   @names __MODULE__.Names
@@ -35,17 +38,30 @@ defmodule Bezalel.Link do
 
   @impl true
   def init(_opts) do
+    :ok = Serve.sweep()
+
     Supervisor.init(
       [
         {Registry, keys: :unique, name: @names},
         {Registry, keys: :duplicate, name: @events},
+        {Registry, keys: :duplicate, name: Bezalel.Link.CredSubscribers},
+        Creds,
+        Turns,
         {DynamicSupervisor, name: @dialers, strategy: :one_for_one}
       ],
       strategy: :one_for_one
     )
   end
 
-  @doc "Dials every website the phone has linked computers on (or log-outs to send)."
+  @doc false
+  # The running dialers, read off their registry (no call into one).
+  def dialers do
+    if Process.whereis(@names),
+      do: Registry.select(@names, [{{:_, :"$1", :_}, [], [:"$1"]}]),
+      else: []
+  end
+
+  @doc "Dials every website the phone has linked computers on (or log-outs to send, or a work parcel to receive)."
   @spec resume() :: :ok
   def resume do
     Enum.each(Store.to_dial(), &dialer/1)
@@ -94,6 +110,26 @@ defmodule Bezalel.Link do
     end)
   end
 
+  @doc false
+  def index_changed(id) do
+    each_dialer(fn pid -> send(pid, {:link_index_changed, id}) end)
+    :ok
+  end
+
+  @doc false
+  def index_removed(uid) when is_binary(uid) do
+    each_dialer(fn pid -> send(pid, {:link_index_removed, uid}) end)
+    :ok
+  end
+
+  def index_removed(_uid), do: :ok
+
+  defp each_dialer(fun) do
+    if Process.whereis(@names) do
+      for origin <- Store.to_dial(), pid <- List.wrap(whereis(origin)), do: fun.(pid)
+    end
+  end
+
   @doc "A scanned code's offer (`Bezalel.Link.Pairing.parse_qr/1`)."
   @spec parse(String.t()) :: {:ok, offer()} | {:error, :not_a_link}
   def parse(text), do: Pairing.parse_qr(text)
@@ -114,11 +150,13 @@ defmodule Bezalel.Link do
     pinned = Store.server_key(origin)
     other_key? = pinned != nil and not Pairing.server_key?(pinned, fp)
 
-    if other_key? and Store.sessions(origin) != [] do
+    if other_key? and (Store.sessions(origin) != [] or Store.revokes(origin) != []) do
       {:error, :key_changed}
     else
-      # A new key with nothing linked there (the website was set up
-      # again): the code's key replaces the old pin once linked.
+      # A new key is safe only when there are no linked sessions and no
+      # queued revocations. Pending revocations still belong to the old
+      # server identity and must never cross to a replacement; a work
+      # parcel announced under the old key is forgotten with it.
       if other_key?, do: Store.unpin(origin)
 
       with {:ok, {device_pub, _}} <- keypair(),
@@ -191,8 +229,10 @@ defmodule Bezalel.Link do
   def via(origin), do: {:via, Registry, {@names, origin}}
 
   @doc """
-  Where the phone dials `origin`: `wss://<host>/link/phone`
-  (`config :bezalel, Bezalel.Link, urls: %{origin => url}` overrides it, for tests).
+  Where the phone dials `origin`: `wss://<host>/link/phone`, or
+  `ws://` for the plain-HTTP loopback origins core's `Pairing` accepts for
+  local development (`config :bezalel, Bezalel.Link, urls: %{origin => url}`
+  overrides it, for tests).
   """
   @spec dial_url(String.t()) :: String.t()
   def dial_url(origin) do
@@ -200,12 +240,14 @@ defmodule Bezalel.Link do
 
     Map.get_lazy(urls, origin, fn ->
       uri = URI.parse(origin)
-      URI.to_string(%URI{scheme: "wss", host: uri.host, port: wss_port(uri), path: "/link/phone"})
+      scheme = if uri.scheme == "http", do: "ws", else: "wss"
+      URI.to_string(%URI{scheme: scheme, host: uri.host, port: ws_port(uri), path: "/link/phone"})
     end)
   end
 
-  defp wss_port(%URI{port: 443}), do: nil
-  defp wss_port(%URI{port: port}), do: port
+  defp ws_port(%URI{scheme: "https", port: 443}), do: nil
+  defp ws_port(%URI{scheme: "http", port: 80}), do: nil
+  defp ws_port(%URI{port: port}), do: port
 
   defp whereis(origin) do
     case Registry.lookup(@names, origin) do

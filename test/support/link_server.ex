@@ -6,6 +6,14 @@ defmodule Bezalel.Test.LinkServer do
   frame the phone sent (`frames/1`) and can push a frame or close the
   socket (`push/2`, `close/2`).
 
+  A work parcel (`seal_work/3`, `put_work/2`) is announced in `welcome`
+  (`work_count`, the records not yet durably acknowledged) and delivered
+  after `cred.sync` one record at a time, the next after the phone's `ack`;
+  an `ack` with `durable: true` moves the cursor past that record, so the
+  next connection resumes there. An error stops delivery until the next
+  connection, as does `limit_work/2`'s count of records per connection.
+  After the last `ack`, `work.done` is sent.
+
       server = LinkServer.start(origin)
       {pair_id, secret} = LinkServer.offer(server, %{"browser" => "Firefox on Linux", ...})
       qr = LinkServer.qr(server, pair_id, secret)
@@ -27,31 +35,64 @@ defmodule Bezalel.Test.LinkServer do
       Agent.update(server, &%{&1 | socket: socket, connects: &1.connects + 1})
 
       {:push, {:text, Wire.encode(hello)},
-       %{server: server, origin: origin, pending: pending, session: nil, device: nil}}
+       %{
+         server: server,
+         origin: origin,
+         pending: pending,
+         session: nil,
+         device: nil,
+         work: [],
+         budget: nil
+       }}
+    catch
+      # The test that started the server has ended.
+      :exit, _ -> {:stop, :normal, %{}}
     end
 
     @impl true
-    def handle_in({text, opcode: :text}, %{session: nil} = state) do
+    def handle_in(frame, state) do
+      receive_in(frame, state)
+    catch
+      :exit, _ -> {:stop, :normal, state}
+    end
+
+    defp receive_in({text, opcode: :text}, %{session: nil} = state) do
       with {:ok, frame} <- Wire.decode(text),
            {:ok, session, device} <- Handshake.accept(state.pending, frame, state.origin) do
         record(state.server, frame)
         Agent.update(state.server, &%{&1 | device: device})
-        sessions = Agent.get(state.server, & &1.sessions)
+
+        %{
+          sessions: sessions,
+          incoming: incoming,
+          account_id: account_id,
+          work: work,
+          work_limit: limit
+        } = Agent.get(state.server, & &1)
+
+        Agent.update(state.server, &%{&1 | incoming: []})
 
         welcome =
           Wire.frame("welcome", %{
             account: "known",
             sessions: sessions,
-            fingerprint: Pairing.fingerprint(device)
+            fingerprint: Pairing.fingerprint(device),
+            account_id: account_id || Pairing.account_id(device),
+            vault: "empty",
+            work_count: length(work)
           })
 
-        push(%{state | session: session, device: device}, welcome)
+        push(
+          %{state | session: session, device: device, work: work, budget: limit && limit - 1},
+          [welcome | incoming] ++ [Wire.frame("cred.sync")] ++ Enum.take(work, 1)
+        )
       else
         _ -> {:stop, :normal, {4401, "bad auth"}, state}
       end
     end
 
-    def handle_in({bytes, opcode: :binary}, %{session: session} = state) when session != nil do
+    defp receive_in({bytes, opcode: :binary}, %{session: session} = state)
+         when session != nil do
       {:ok, plain, session} = Handshake.open(session, bytes)
       {:ok, frame} = Wire.decode(plain)
       record(state.server, frame)
@@ -62,6 +103,26 @@ defmodule Bezalel.Test.LinkServer do
     def handle_info({:push, frame}, state), do: push(state, frame)
     def handle_info({:close, code}, state), do: {:stop, :normal, {code, "test"}, state}
     def handle_info(_other, state), do: {:ok, state}
+
+    defp answer(state, %{"op" => "test.ignore"}), do: {:ok, state}
+
+    # The record being delivered: the next one after an ack, none after an
+    # error or once this connection's limit is reached.
+    defp answer(%{work: [%{"id" => id} | rest]} = state, %{"re" => id, "op" => op} = reply) do
+      if op == "ack" and reply["durable"] == true,
+        do: Agent.update(state.server, &%{&1 | work: rest})
+
+      cond do
+        op != "ack" or state.budget == 0 ->
+          {:ok, %{state | work: []}}
+
+        rest == [] ->
+          push(%{state | work: []}, Wire.frame("work.done"))
+
+        true ->
+          push(%{state | work: rest, budget: state.budget && state.budget - 1}, hd(rest))
+      end
+    end
 
     defp answer(state, %{"op" => "pair.claim", "p" => p, "proof" => proof} = req) do
       {:ok, pair_id} = Wire.unb64(p)
@@ -102,7 +163,7 @@ defmodule Bezalel.Test.LinkServer do
           %{s | offers: Map.delete(s.offers, pair_id), sessions: s.sessions ++ [session]}
         end)
 
-        push(state, Wire.reply(req, "ack", %{session: session}))
+        push(state, [Wire.reply(req, "ack", %{session: session}), Wire.frame("cred.sync")])
       else
         push(state, Wire.error(req, "not_claimed"))
       end
@@ -115,13 +176,18 @@ defmodule Bezalel.Test.LinkServer do
     end
 
     defp answer(state, %{"op" => "sessions.revoke", "session" => id} = req) do
-      sessions =
-        Agent.get_and_update(state.server, fn s ->
-          kept = if id == "all", do: [], else: Enum.reject(s.sessions, &(&1["id"] == id))
-          {kept, %{s | sessions: kept}}
-        end)
+      case Agent.get(state.server, & &1.revoke_error) do
+        nil ->
+          sessions = Agent.get_and_update(state.server, &remove_session(&1, id))
 
-      push(state, [Wire.reply(req, "ack"), Wire.frame("sessions.changed", %{sessions: sessions})])
+          push(state, [
+            Wire.reply(req, "ack"),
+            Wire.frame("sessions.changed", %{sessions: sessions})
+          ])
+
+        code ->
+          push(state, Wire.error(req, code))
+      end
     end
 
     defp answer(state, %{"op" => "sessions.list"} = req),
@@ -133,6 +199,11 @@ defmodule Bezalel.Test.LinkServer do
 
     defp answer(state, %{"id" => _} = req), do: push(state, Wire.error(req, "unknown_op"))
     defp answer(state, _frame), do: {:ok, state}
+
+    defp remove_session(state, id) do
+      kept = if id == "all", do: [], else: Enum.reject(state.sessions, &(&1["id"] == id))
+      {kept, %{state | sessions: kept}}
+    end
 
     # One frame or several, sealed in order.
     defp push(state, frames) when is_list(frames) do
@@ -185,7 +256,12 @@ defmodule Bezalel.Test.LinkServer do
           socket: nil,
           device: nil,
           connects: 0,
-          refuse: false
+          incoming: [],
+          account_id: nil,
+          refuse: false,
+          revoke_error: opts[:revoke_error],
+          work: [],
+          work_limit: nil
         }
       end)
 
@@ -245,9 +321,64 @@ defmodule Bezalel.Test.LinkServer do
   @doc "Refuses (503) new connections, or takes them again."
   def refuse(server, refuse?), do: Agent.update(server, &%{&1 | refuse: refuse?})
 
+  @doc "Sends these credential changes before the next connection's sync barrier."
+  def on_connect(server, frames), do: Agent.update(server, &%{&1 | incoming: frames})
+
+  @doc "Sets the claimed account for the next welcome (a mismatched-account test)."
+  def claim_account(server, id), do: Agent.update(server, &%{&1 | account_id: id})
+
   @doc "Sends `frame` (sealed) to the phone on the current socket."
   def push(server, frame), do: send(Agent.get(server, & &1.socket), {:push, frame})
 
   @doc "Closes the current socket with `code`."
   def close(server, code \\ 1000), do: send(Agent.get(server, & &1.socket), {:close, code})
+
+  @doc "Announces these sealed work records (`seal_work/3`) on the next connection."
+  def put_work(server, records), do: Agent.update(server, &%{&1 | work: records})
+
+  @doc "Delivers at most `count` work records per connection (nil: all)."
+  def limit_work(server, count), do: Agent.update(server, &%{&1 | work_limit: count})
+
+  @doc "The work records not yet durably acknowledged (the website's cursor)."
+  def work(server), do: Agent.get(server, & &1.work)
+
+  @doc """
+  Seals `inner` request frames to the phone's mailbox key `phone_public`
+  as one work parcel of `account_id`, as the website does when the
+  account's last session expires: one `work.envelope` per frame, in order.
+  """
+  def seal_work(account_id, phone_public, inner, parcel \\ nil) do
+    parcel = parcel || Wire.b64(:crypto.strong_rand_bytes(16))
+    count = length(inner)
+
+    inner
+    |> Enum.with_index()
+    |> Enum.map(fn {frame, seq} ->
+      {ephemeral, private} = :crypto.generate_key(:ecdh, :x25519)
+      shared = :crypto.compute_key(:ecdh, phone_public, private, :x25519)
+
+      key =
+        :crypto.hash(:sha256, ["bezalel work mailbox v1", shared, ephemeral, phone_public])
+
+      nonce = :crypto.strong_rand_bytes(12)
+      aad = "#{account_id}:#{parcel}:#{seq}"
+
+      {cipher, tag} =
+        :crypto.crypto_one_time_aead(:aes_256_gcm, key, nonce, Wire.encode(frame), aad, 16, true)
+
+      Wire.frame(
+        "work.envelope",
+        %{
+          parcel: parcel,
+          seq: seq,
+          count: count,
+          ephemeral: Wire.b64(ephemeral),
+          nonce: Wire.b64(nonce),
+          ciphertext: Wire.b64(cipher),
+          tag: Wire.b64(tag)
+        },
+        "work:#{parcel}:#{seq}"
+      )
+    end)
+  end
 end

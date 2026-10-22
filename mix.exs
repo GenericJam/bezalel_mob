@@ -52,7 +52,7 @@ defmodule Bezalel.MixProject do
       sibling(
         :bezalel_core,
         "GenericJam/bezalel_core",
-        "3d650a1f2f06ce9736598b786797f4dcb852cdd3"
+        "e4de7d9cd4d200e1ed9f406c995063ee7170d0e7"
       ),
       # The agent core: models, sign-in, usage, Dyn; attachments by reference
       # (Materials) from 0.2; Rho.Consult and ask_model (Pushback) from 0.3;
@@ -75,7 +75,7 @@ defmodule Bezalel.MixProject do
       # scanner (CameraX + ML Kit / AVFoundation; it uses mob_camera's camera
       # permission) and the WebSocket the phone dials the website with
       # (Bezalel.Link.Dialer, after sloppy_joe's dial-out).
-      {:mob_scanner, "~> 0.1.7"},
+      sibling(:mob_scanner, "~> 0.1.8"),
       {:mint_web_socket, "~> 1.0"},
       # The platform secure store (Keychain / Keystore) rho keeps the
       # sign-ins and API keys in. Unreleased: pinned to a commit.
@@ -125,14 +125,38 @@ defmodule Bezalel.MixProject do
   # GitHub, pinned to a commit, so a fresh clone builds (sibling/3); released
   # ones from Hex (sibling/2). BEZALEL_LOCAL_DEPS
   # uses sibling checkouts (../bezalel_core, ../rho, ../mob_secure_store,
-  # ../mob_bezalel, ../mob_markdown) instead, for working on them: 1 (or
-  # true) for all of them, or a comma-separated list of apps
+  # ../mob_bezalel, ../mob_markdown, ../mob_scanner) instead, for working on
+  # them: 1 (or true) for all of them, or a comma-separated list of apps
   # (BEZALEL_LOCAL_DEPS=bezalel_core,rho) for just those. `opts` go on the
   # GitHub pin (e.g. override: true for one another sibling also pins).
   defp sibling(app, requirement) do
-    if local_dep?(app),
-      do: {app, path: "../#{app}", override: true},
-      else: {app, requirement}
+    if local_dep?(app) do
+      local_version!(app, requirement)
+      {app, path: "../#{app}", override: true}
+    else
+      {app, requirement}
+    end
+  end
+
+  # Mix doesn't check a path dependency's version against the requirement:
+  # an old checkout would quietly replace the release this app needs.
+  defp local_version!(app, requirement) do
+    project = Path.expand("../#{app}/mix.exs", __DIR__)
+
+    version =
+      with {:ok, source} <- File.read(project),
+           [_, version] <- Regex.run(~r/(?:@version\s+|version:\s*)"([^"]+)"/, source) do
+        version
+      else
+        _ -> nil
+      end
+
+    unless version && Version.match?(version, requirement) do
+      Mix.raise(
+        "BEZALEL_LOCAL_DEPS: ../#{app} is #{version || "missing or has no version"}, " <>
+          "this app needs #{requirement}; update the checkout or leave #{app} out"
+      )
+    end
   end
 
   defp sibling(app, repo, ref, opts \\ []) do
