@@ -302,15 +302,11 @@ defmodule Bezalel.SettingsTest do
     end
 
     test "each translation says what it is, what it covers and whether the phone has it" do
-      none = %{packs: []}
-
-      installed = %{
-        packs: [%{name: "translations", installed: %{size: 1, data_version: 3}, update: false}]
-      }
-
-      outdated = %{
-        packs: [%{name: "translations", installed: %{size: 1, data_version: 2}, update: true}]
-      }
+      # The translations pack's keys: not installed, data version 3, and one
+      # from before the JPS, ULT and UST.
+      none = nil
+      installed = ~w(net jps1917 ult ust)
+      outdated = ~w(net)
 
       note = &Bezalel.Views.Settings.translation_note/2
 
@@ -323,6 +319,8 @@ defmodule Bezalel.SettingsTest do
       for key <- ["ult", "ust"] do
         assert note.(key, installed) =~
                  "It doesn't have Numbers, 1–2 Chronicles, Ecclesiastes, Isaiah, Jeremiah and Ezekiel yet: those are quoted from the BSB."
+
+        refute note.(key, installed) =~ "unfoldingWord"
       end
 
       for key <- ["net", "jps1917", "ult", "ust"] do
@@ -330,12 +328,10 @@ defmodule Bezalel.SettingsTest do
         assert note.(key, none) =~ "Needs the Bible translations pack (Study library)"
       end
 
-      # A translations pack from before the JPS, ULT and UST: the NET is in
-      # it, the others need the update.
       assert note.("net", outdated) =~ "From the Bible translations pack on this phone."
 
       for key <- ["jps1917", "ult", "ust"],
-          do: assert(note.(key, outdated) =~ "Update the Bible translations pack")
+          do: assert(note.(key, outdated) =~ "is older and doesn't have it: update the pack")
     end
 
     test "the NET's acknowledgement is a tap away while the NET is the translation" do

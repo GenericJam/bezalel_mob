@@ -157,7 +157,7 @@ defmodule Bezalel.Views.Sheets do
         choice_row(%{
           id: "translation-" <> t.key,
           name: t.name,
-          note: Settings.translation_note(t.key, assigns.packs),
+          note: Settings.translation_note(t.key, assigns.pack_translations),
           dot: nil,
           selected: t.key == current,
           tap: {self(), {:settings, {:translation, t.key}}}

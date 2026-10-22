@@ -12,6 +12,7 @@ defmodule Bezalel.Views.StudyLibrary do
   alias Bezalel.{Packs, Settings}
   alias Bezalel.Study.Translations
   alias Bezalel.Views.Helpers
+  alias Exqlite.Sqlite3
   alias Mob.Socket
   alias MobBezalel.UI
 
@@ -51,11 +52,63 @@ defmodule Bezalel.Views.StudyLibrary do
   def event(:changed, socket), do: refresh(socket)
   def event({:notice, text}, socket), do: socket |> refresh() |> Helpers.toast(text)
 
-  defp refresh(socket),
-    do: Socket.assign(socket, packs: Packs.status(), metered: Packs.metered?())
+  defp refresh(socket) do
+    socket
+    |> Socket.assign(packs: Packs.status(), metered: Packs.metered?())
+    |> pack_translations()
+  end
 
   defp installed?(status, name),
     do: Enum.any?(status.packs, &(&1.name == name and &1.installed != nil))
+
+  # The translation keys the translations pack on the phone holds
+  # (`:pack_translations`; nil while it isn't installed): a pack from
+  # before data version 3 has only the NET, whether or not a check has seen
+  # the update yet. Read again only when the file changes.
+  defp pack_translations(socket) do
+    status = socket.assigns.packs
+    file = Path.join(status.dir, "translations.sqlite")
+
+    stamp =
+      with true <- installed?(status, "translations"),
+           {:ok, %{size: size, mtime: mtime}} <- File.stat(file),
+           do: {size, mtime},
+           else: (_ -> nil)
+
+    if Map.has_key?(socket.assigns, :pack_translations) and
+         socket.assigns[:pack_translations_stamp] == stamp,
+       do: socket,
+       else:
+         Socket.assign(socket,
+           pack_translations_stamp: stamp,
+           pack_translations: stamp && read_pack_translations(file)
+         )
+  end
+
+  @doc """
+  The translation keys in the translations pack at `file` (its
+  `translations` table), `[]` when it can't be read.
+  """
+  @spec read_pack_translations(Path.t()) :: [String.t()]
+  def read_pack_translations(file) do
+    case Sqlite3.open(file, mode: :readonly) do
+      {:ok, conn} ->
+        try do
+          with {:ok, statement} <- Sqlite3.prepare(conn, "SELECT key FROM translations"),
+               {:ok, rows} <- Sqlite3.fetch_all(conn, statement) do
+            Sqlite3.release(conn, statement)
+            for [key] <- rows, do: key
+          else
+            _ -> []
+          end
+        after
+          Sqlite3.close(conn)
+        end
+
+      {:error, _} ->
+        []
+    end
+  end
 
   # ── Events ────────────────────────────────────────────────────────────────
 
@@ -117,7 +170,7 @@ defmodule Bezalel.Views.StudyLibrary do
   text_color={:on_surface}
 />),
           metered_note(assigns, Enum.any?(status.packs, &(&1.installed == nil))),
-          translation_note(assigns.study, status),
+          translation_note(assigns.study, assigns.pack_translations),
           note(empty)
         ],
         padding: 14,
@@ -238,18 +291,24 @@ defmodule Bezalel.Views.StudyLibrary do
   defp metered_note(_assigns, _missing), do: []
 
   # Every translation but the BSB (core) is in the translations pack;
-  # without it the tools quote the BSB from core, and say so.
-  defp translation_note(%{translation: key}, status) do
+  # without it, or with a pack from before the translation was added, the
+  # tools quote the BSB from core, and say so.
+  defp translation_note(%{translation: key}, in_pack) do
     case Translations.get(key) do
       %{key: "bsb"} ->
         []
 
+      %{name: name} when in_pack == nil ->
+        note(
+          "Your translation, the #{name}, is in the #{title("translations")} pack. Until it's on this phone, the study tools quote the BSB from the core pack and say so."
+        )
+
       %{name: name} ->
-        if installed?(status, "translations"),
+        if key in in_pack,
           do: [],
           else:
             note(
-              "Your translation, the #{name}, is in the #{title("translations")} pack. Until it's on this phone, the study tools quote the BSB from the core pack and say so."
+              "Your translation, the #{name}, isn't in the #{title("translations")} pack on this phone: update it. Until then, the study tools quote the BSB from the core pack and say so."
             )
 
       nil ->

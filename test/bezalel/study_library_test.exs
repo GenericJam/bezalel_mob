@@ -190,7 +190,7 @@ defmodule Bezalel.StudyLibraryTest do
 
   test "a library with the translations pack lists it as Bible translations, optional: download, then remove",
        ctx do
-    translations = PackServer.pack("translations", "v2")
+    translations = PackServer.translations_pack("v3", ~w(net jps1917 ult ust))
 
     PackServer.publish(ctx.server, ctx.base, 2, [
       {"core", ctx.core, true},
@@ -225,6 +225,39 @@ defmodule Bezalel.StudyLibraryTest do
     assert assigns(view).toast.text == "Removed the Bible translations pack."
     assert pack_button?(view, {:download, "translations"})
     assert text(view) =~ missing
+  end
+
+  test "a translations pack from before data version 3 (the NET only), not yet checked: the JPS, ULT and UST say it needs updating",
+       ctx do
+    PackServer.publish(ctx.server, ctx.base, 3, [
+      {"core", ctx.core, true},
+      {"translations", PackServer.translations_pack("v3", ~w(net jps1917 ult ust)), false}
+    ])
+
+    :ok = Packs.check()
+    assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 3."}}, 5_000
+    flush()
+
+    # The old pack lands after the check (pushed, or kept from an older
+    # build): installed, with no update flagged.
+    old = PackServer.translations_pack("v2", ~w(net))
+    File.write!(Path.join(:sys.get_state(Packs).dir, "translations.sqlite"), old.raw)
+
+    view = settings()
+
+    assert %{installed: %{}, update: false} =
+             Enum.find(assigns(view).packs.packs, &(&1.name == "translations"))
+
+    assert assigns(view).pack_translations == ["net"]
+    assert text(view) =~ "From the Bible translations pack on this phone."
+
+    view = render_info(view, {:tap, {:settings, {:translation, "ult"}}})
+
+    assert text(view) =~
+             "The Bible translations pack on this phone is older and doesn't have it: update the pack (Study library)."
+
+    assert text(view) =~
+             "Your translation, the Literal Text (ULT, adapted), isn't in the Bible translations pack on this phone: update it."
   end
 
   test "a library with the scrolls pack lists it as the Dead Sea Scrolls, optional, after the ancient sources; a pack this app doesn't know is left out",

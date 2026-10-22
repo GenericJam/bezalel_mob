@@ -6,7 +6,7 @@
 ## Context
 bezalel_core's data version 3 adds to its optional study packs: the
 translations pack now holds the JPS 1917 and Literal and Simplified Texts
-adapted from unfoldingWord's ULT and UST beside the NET (keys `jps1917`,
+adapted from the ULT and UST beside the NET (keys `jps1917`,
 `ult`, `ust` in `Bezalel.Study.Translations.all/0`; the BSB stays in core),
 and four new packs arrive: `witnesses` (the Samaritan Pentateuch, the
 SBLGNT and its apparatus, the UBS HOTTP), `fathers` (the Apostolic Fathers,
@@ -30,7 +30,11 @@ the JPS has no New Testament; this ULT and UST release has no Numbers,
   is the translation's name and `Views.Settings.translation_note/2`: what it
   is, where it comes from, what it covers (books quoted from the BSB
   instead), and whether this phone has it (the translations pack missing,
-  or installed but from before data version 3, which holds only the NET).
+  or installed but from before data version 3, which holds only the NET:
+  read from the installed pack's `translations` table, `StudyLibrary`'s
+  `:pack_translations`, so it is right before any check for updates).
+  The ULT's and UST's publisher is named only in their required
+  attribution, never in the app's own copy.
   A translation the phone doesn't have can still be chosen: the tools quote
   the BSB until it is, and say so. Voice uses a pushed screen instead; a
   sheet suits a pick-one choice with no editing.
@@ -60,6 +64,9 @@ the JPS has no New Testament; this ULT and UST release has no Numbers,
   read the pack and stay right either way).
 - A phone with the data version 2 translations pack quotes the NET from it
   but the BSB for the JPS, ULT and UST until the pack is updated; Settings
-  says so once a check has seen the update.
+  says so from the pack's own contents, checked or not.
+- Corrected 2026-10-22 after review: the first version read the old pack
+  only from a check's update flag, so an unchecked v2 pack claimed the JPS,
+  ULT and UST; and its chooser notes named the ULT's publisher.
 - The app needs bezalel_core 7cda29d or later (the `:machine` citation kind,
   per-row card versions, the new translation keys); `mix.exs` pins it.

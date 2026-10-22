@@ -282,7 +282,7 @@ defmodule Bezalel.Views.Settings do
     [
       choice_row(
         "Translation",
-        {translation.name, translation_note(translation.key, assigns.packs), nil},
+        {translation.name, translation_note(translation.key, assigns.pack_translations), nil},
         tap: {self(), {:settings, :translations}},
         id: "settings-translation"
       ),
@@ -304,14 +304,15 @@ defmodule Bezalel.Views.Settings do
 
   @doc """
   What translation `key` is, where it comes from, what it covers, and
-  whether this phone has it (`packs`, `Bezalel.Packs.status/0`): the
-  Settings row's line and the chooser's.
+  whether this phone has it (`in_pack`: the keys the translations pack on
+  the phone holds, nil while it isn't installed; the `:pack_translations`
+  assign): the Settings row's line and the chooser's.
   """
-  @spec translation_note(String.t(), map()) :: String.t()
-  def translation_note("bsb", _packs),
+  @spec translation_note(String.t(), [String.t()] | nil) :: String.t()
+  def translation_note("bsb", _in_pack),
     do: "Public domain; the whole Bible, from the core pack."
 
-  def translation_note(key, packs), do: about(key) <> " " <> pack_status(key, packs)
+  def translation_note(key, in_pack), do: about(key) <> " " <> pack_status(key, in_pack)
 
   defp about("net"),
     do: "Biblical Studies Press, 2019; quoted by permission. The whole Bible."
@@ -322,25 +323,21 @@ defmodule Bezalel.Views.Settings do
 
   defp about("ult"),
     do:
-      "Literal, adapted from unfoldingWord's ULT (CC BY-SA 4.0). It doesn't have #{@unreleased} yet: those are quoted from the BSB."
+      "A literal English text adapted from the ULT (CC BY-SA 4.0). It doesn't have #{@unreleased} yet: those are quoted from the BSB."
 
   defp about("ust"),
     do:
-      "Simplified, meaning-based, adapted from unfoldingWord's UST (CC BY-SA 4.0). It doesn't have #{@unreleased} yet: those are quoted from the BSB."
+      "A simplified, meaning-based English text adapted from the UST (CC BY-SA 4.0). It doesn't have #{@unreleased} yet: those are quoted from the BSB."
 
-  defp pack_status(key, packs) do
-    pack = Enum.find(packs.packs, &(&1.name == "translations"))
+  defp pack_status(_key, nil),
+    do:
+      "Needs the Bible translations pack (Study library); until it's on this phone, the tools quote the BSB and say so."
 
-    cond do
-      pack == nil or pack.installed == nil ->
-        "Needs the Bible translations pack (Study library); until it's on this phone, the tools quote the BSB and say so."
-
-      key != "net" and pack.update == true ->
-        "Update the Bible translations pack (Study library) to quote it; until then the tools quote the BSB and say so."
-
-      true ->
-        "From the Bible translations pack on this phone."
-    end
+  defp pack_status(key, in_pack) do
+    if key in in_pack,
+      do: "From the Bible translations pack on this phone.",
+      else:
+        "The Bible translations pack on this phone is older and doesn't have it: update the pack (Study library). Until then the tools quote the BSB and say so."
   end
 
   # A row opening a screen: its title, what it's set to, and a cue (Edit).
