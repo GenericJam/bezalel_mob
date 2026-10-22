@@ -11,6 +11,7 @@ defmodule Bezalel.Settings do
   (`Rho.Auth`).
   """
 
+  alias Bezalel.Link.Dialer
   alias Bezalel.Study.Preferences
 
   @modes [:light, :dark, :night, :system]
@@ -58,7 +59,11 @@ defmodule Bezalel.Settings do
   def put_text_size(size) when size in @text_size_names,
     do: Mob.State.put(:bezalel_text_size, size)
 
-  def put_model(id) when is_binary(id), do: Mob.State.put(:bezalel_model, id)
+  def put_model(id) when is_binary(id) do
+    Mob.State.put(:bezalel_model, id)
+    notify_link_preferences()
+  end
+
   def put_conversation_id(id), do: Mob.State.put(:bezalel_conversation, id)
 
   @doc "Has the first-launch offer of the core study pack been shown?"
@@ -131,14 +136,39 @@ defmodule Bezalel.Settings do
   @spec put_study_preferences(Preferences.t() | map() | keyword()) :: Preferences.t()
   def put_study_preferences(prefs) do
     prefs = Preferences.new(prefs)
-
-    stored =
-      prefs
-      |> Map.from_struct()
-      |> Map.update!(:excluded_sources, &Enum.sort/1)
-
-    Mob.State.put(:bezalel_study_preferences, stored)
+    Mob.State.put(:bezalel_study_preferences, plain_study(prefs))
+    notify_link_preferences()
     prefs
+  end
+
+  @doc "The phone-authoritative model and study preferences for linked computers."
+  def link_preferences do
+    %{
+      "model" => model(),
+      "study" => plain_study(study_preferences()),
+      "updated_at" => Mob.State.get(:bezalel_prefs_updated_at, "1970-01-01T00:00:00Z")
+    }
+  end
+
+  @doc "Applies a newer linked-computer preference snapshot without echoing it as a local edit."
+  def apply_link_preferences(model, study, updated_at) do
+    Mob.State.put(:bezalel_model, model)
+    Mob.State.put(:bezalel_study_preferences, plain_study(Preferences.new(study)))
+    Mob.State.put(:bezalel_prefs_updated_at, updated_at)
+    Dialer.preferences_changed()
+    :ok
+  end
+
+  defp plain_study(prefs) do
+    prefs
+    |> Map.from_struct()
+    |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
+    |> Map.update!("excluded_sources", &Enum.sort/1)
+  end
+
+  defp notify_link_preferences do
+    Mob.State.put(:bezalel_prefs_updated_at, DateTime.to_iso8601(DateTime.utc_now()))
+    Dialer.preferences_changed()
   end
 
   @doc "Applies `fun` to the study preferences and stores the result (`put_study_preferences/1`)."

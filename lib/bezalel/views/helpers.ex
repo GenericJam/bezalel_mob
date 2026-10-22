@@ -4,6 +4,7 @@ defmodule Bezalel.Views.Helpers do
 
   alias Bezalel.{Agent, Library, MaterialStore, Models, Settings}
   alias Bezalel.Agent.Reply
+  alias Bezalel.Link.Turns
   alias Bezalel.Views.{Conversations, Images, Workshop}
   alias Bezalel.Views.Materials, as: MaterialsView
   alias Mob.Socket
@@ -227,6 +228,7 @@ defmodule Bezalel.Views.Helpers do
     |> Workshop.close_panel()
     |> Socket.assign(
       conversation: conversation,
+      web_held: Turns.held?(conversation.session_id),
       messages: messages,
       menu: nil,
       toast: nil,
@@ -271,6 +273,7 @@ defmodule Bezalel.Views.Helpers do
           release?.(cid) and not Reply.running?(streams[cid]),
           into: MapSet.new() do
         :ok = Agent.release(cid)
+        if c = Library.get_conversation(cid), do: Turns.phone_turn(c.session_id, :finish)
         cid
       end
 

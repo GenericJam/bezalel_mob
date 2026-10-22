@@ -229,15 +229,18 @@ defmodule Bezalel.LibraryTest do
     assert [%{message_count: 4}] = Library.list_conversations()
   end
 
-  test "after a torn last line the chat shows what the file holds, not what was meant to be written" do
+  test "after a torn last line the next write starts a line of its own: nothing is lost" do
     c = conversation!()
     {:ok, _} = Library.add_message(c, %{role: :user, text: "one"})
-    File.write!(Library.session_path(c.id), ~s({"type":"mess), [:append])
+    path = Library.session_path(c.id)
+    File.write!(path, ~s({"type":"mess), [:append])
 
-    # The append joins the torn line: neither reads back.
+    # The torn line is set aside (Bezalel.Link.TornTail.repair/1), so
+    # the append doesn't join it.
     {:ok, _} = Library.add_message(c, %{role: :user, text: "two"})
-    assert texts(c) == ["one"]
-    assert [%{message_count: 1}] = Library.list_conversations()
+    assert texts(c) == ["one", "two"]
+    assert [%{message_count: 2}] = Library.list_conversations()
+    refute File.read!(path) =~ ~s({"type":"mess{)
   end
 
   describe "deleting a conversation" do

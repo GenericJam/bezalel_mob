@@ -298,8 +298,8 @@ defmodule Bezalel.Views.Settings do
 
   defp translation_note(_bsb, _packs), do: "Berean Standard Bible, from the core pack."
 
-  # A row opening a screen: its title, what it's set to, and an Edit cue.
-  defp nav_row(title, value, tap) do
+  # A row opening a screen: its title, what it's set to, and a cue (Edit).
+  defp nav_row(title, value, tap, cue \\ "Edit") do
     ~MOB"""
     <Box
       background={:surface}
@@ -318,7 +318,7 @@ defmodule Bezalel.Views.Settings do
           <Text text={title} font={:ui_medium} text_size={15} text_color={:on_surface} />
           <Text text={value} text_size={12} text_color={:muted} />
         </Column>
-        <Text text="Edit" font={:ui_medium} text_size={13} text_color={:secondary} />
+        <Text text={cue} font={:ui_medium} text_size={13} text_color={:secondary} />
       </Row>
     </Box>
     """
@@ -356,7 +356,20 @@ defmodule Bezalel.Views.Settings do
         gap: 12
       )
 
-    [subscriptions, keys]
+    count = assigns[:linked_computers] || 0
+
+    linked =
+      case count do
+        0 -> "None. Use Bezalel on a computer through this phone."
+        1 -> "1 computer"
+        n -> "#{n} computers"
+      end
+
+    [
+      subscriptions,
+      keys,
+      nav_row("Linked computers", linked, {self(), {:settings, :linked_computers}}, "Open")
+    ]
   end
 
   defp subscription(provider, assigns) do
@@ -703,6 +716,11 @@ defmodule Bezalel.Views.Settings do
   # The voice screen tells this one (`{:voice_chosen, voice}`) when it stores a choice.
   def handle(:voice, socket),
     do: {:noreply, Socket.push_screen(socket, Bezalel.VoiceScreen, %{app: self()})}
+
+  # Linked computers tells this screen (`{:linked_computers, :changed}`)
+  # when one is linked or logged out.
+  def handle(:linked_computers, socket),
+    do: {:noreply, Socket.push_screen(socket, Bezalel.LinkedComputersScreen, %{app: self()})}
 
   @doc """
   The study preferences changed (here, or on the approach or sources

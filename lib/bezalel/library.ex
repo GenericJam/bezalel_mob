@@ -22,8 +22,9 @@ defmodule Bezalel.Library do
   import Ecto.Query
 
   alias Bezalel.Agent.{Storyboard, Title}
-  alias Bezalel.{Images, MaterialStore, Models, Repo}
+  alias Bezalel.{Images, Link, MaterialStore, Models, Repo}
   alias Bezalel.Library.{Conversation, Message, Tool, Transcript}
+  alias Bezalel.Link.{Index, Serve, TornTail}
   alias Rho.Session
 
   defmodule Undo do
@@ -118,7 +119,12 @@ defmodule Bezalel.Library do
   """
   @spec put_pushback(integer(), boolean()) :: Conversation.t() | nil
   def put_pushback(id, on?) when is_boolean(on?) do
-    Repo.update_all(from(c in shelf(), where: c.id == ^id), set: [pushback: on?])
+    {changed, _} =
+      Repo.update_all(from(c in shelf(), where: c.id == ^id and c.pushback != ^on?),
+        set: [pushback: on?, updated_at: DateTime.utc_now()]
+      )
+
+    if changed > 0, do: Link.index_changed(id)
     get_conversation(id)
   end
 
@@ -132,9 +138,12 @@ defmodule Bezalel.Library do
   @spec name_after(integer(), String.t()) :: Conversation.t() | nil
   def name_after(id, question) do
     with name when is_binary(name) <- Title.from_question(question) do
-      Repo.update_all(from(c in shelf(), where: c.id == ^id and c.name == "New study"),
-        set: [name: name]
-      )
+      {changed, _} =
+        Repo.update_all(from(c in shelf(), where: c.id == ^id and c.name == "New study"),
+          set: [name: name, updated_at: DateTime.utc_now()]
+        )
+
+      if changed > 0, do: Link.index_changed(id)
     end
 
     get_conversation(id)
@@ -152,9 +161,15 @@ defmodule Bezalel.Library do
   def put_title(id, %{title: title, summary: summary}, count) do
     query = from(c in shelf(), where: c.id == ^id and c.message_count == ^count)
 
-    case Repo.update_all(query, set: [name: title, summary: summary]) do
-      {1, _} -> get_conversation(id)
-      {0, _} -> nil
+    case Repo.update_all(query,
+           set: [name: title, summary: summary, updated_at: DateTime.utc_now()]
+         ) do
+      {1, _} ->
+        Link.index_changed(id)
+        get_conversation(id)
+
+      {0, _} ->
+        nil
     end
   end
 
@@ -173,7 +188,9 @@ defmodule Bezalel.Library do
         {:error, :not_found}
 
       c ->
+        uid = Index.written_uid(c)
         Repo.update_all(from(x in Conversation, where: x.id == ^id), set: [deleted_at: now])
+        Link.index_removed(uid)
         {:ok, %Deleted{conversation_id: id, name: c.name, deleted_at: now}}
     end
   end
@@ -186,8 +203,12 @@ defmodule Bezalel.Library do
   @spec undelete(Deleted.t()) :: :ok | {:error, :gone}
   def undelete(%Deleted{conversation_id: id, deleted_at: at}) do
     case Repo.update_all(deleted(id, at), set: [deleted_at: nil]) do
-      {1, _} -> :ok
-      {0, _} -> {:error, :gone}
+      {1, _} ->
+        Link.index_changed(id)
+        :ok
+
+      {0, _} ->
+        {:error, :gone}
     end
   end
 
@@ -229,8 +250,12 @@ defmodule Bezalel.Library do
   # finishes it. The paths under rho's data dir are rho's layout
   # (`Rho.Artifacts`, `Rho.Tools.Todo`), which keep a session id like
   # rho's own (letters, digits, `-`, `_`) as it is; any other id isn't
-  # made into a path.
+  # made into a path. The session id is tombstoned before the row goes, so
+  # a linked computer (live, or a work parcel sealed before it heard of
+  # the delete) can't create it again.
   defp purge_one(%Conversation{} = c) do
+    uid = Index.written_uid(c)
+    if c.session_id, do: Serve.tombstone(c.session_id)
     with path when is_binary(path) <- session_path(c), do: File.rm(path)
 
     if path_segment?(c.session_id) do
@@ -238,6 +263,7 @@ defmodule Bezalel.Library do
       File.rm_rf(Path.join(Images.dir(), c.session_id))
       File.rm_rf(Path.join([data, "artifacts", c.session_id]))
       File.rm(Path.join([data, "todos", c.session_id <> ".json"]))
+      TornTail.forget(c.session_id)
     end
 
     # Its materials stay in Materials (the user's own files); they just no
@@ -245,6 +271,7 @@ defmodule Bezalel.Library do
     if c.session_id, do: MaterialStore.unlink_session(c.session_id)
 
     Repo.delete_all(from(x in Conversation, where: x.id == ^c.id))
+    Link.index_removed(uid)
     :ok
   end
 
@@ -355,6 +382,23 @@ defmodule Bezalel.Library do
   @spec touch(integer()) :: :ok
   def touch(conversation_id) do
     shelve(conversation_id, length(messages(conversation_id)), true)
+  end
+
+  @doc """
+  Records that a linked computer appended to the conversation's session:
+  the shelf's message count follows, and its place is the appended
+  entries' own time `at` (their `timestamp`), never earlier than it was;
+  with no time (nil) its place stays.
+  """
+  @spec touch(integer(), DateTime.t() | nil) :: :ok
+  def touch(conversation_id, at) do
+    if at do
+      Repo.update_all(from(c in shelf(), where: c.id == ^conversation_id and c.updated_at < ^at),
+        set: [updated_at: at]
+      )
+    end
+
+    shelve(conversation_id, length(messages(conversation_id)), false)
   end
 
   @doc """
@@ -541,30 +585,22 @@ defmodule Bezalel.Library do
     end
   end
 
-  # Appends `entries`; returns the session and the entries as written, or
-  # nil for them when the file ended in a torn line (an append joins it, so
-  # neither reads back: what the file holds is read again).
+  # Appends `entries`; returns the session and the entries as written. A
+  # torn last line (a linked computer's append cut short, or a crash) is
+  # set aside first, so nothing written joins it; the conversation's lock
+  # keeps a computer's append out meanwhile (`Bezalel.Link.Serve`).
   defp write(session, entries) do
-    torn? = torn?(session)
+    Serve.locked(session.id, fn ->
+      :ok = TornTail.repair(session.id)
 
-    {session, added} =
-      Enum.reduce(entries, {session, []}, fn entry, {s, added} ->
-        {s, entry} = Session.append(s, entry)
-        {s, [entry | added]}
-      end)
+      {session, added} =
+        Enum.reduce(entries, {session, []}, fn entry, {s, added} ->
+          {s, entry} = Session.append(s, entry)
+          {s, [entry | added]}
+        end)
 
-    {session, if(torn?, do: nil, else: Enum.reverse(added))}
-  end
-
-  defp torn?(%Session{written?: false}), do: false
-
-  defp torn?(%Session{path: path}) do
-    with {:ok, %File.Stat{size: size}} when size > 0 <- File.stat(path),
-         {:ok, last} <- File.open(path, [:read, :binary], &:file.pread(&1, size - 1, 1)) do
-      last != {:ok, "\n"}
-    else
-      _ -> false
-    end
+      {session, Enum.reverse(added)}
+    end)
   end
 
   # Puts the leaf under `parent` and appends `copies`; a marker when there
@@ -616,10 +652,12 @@ defmodule Bezalel.Library do
   defp shelve(conversation_id, count, active?) do
     set = if active?, do: [updated_at: DateTime.utc_now()], else: []
 
-    Repo.update_all(from(c in shelf(), where: c.id == ^conversation_id),
-      set: [message_count: count] ++ set
-    )
+    {changed, _} =
+      Repo.update_all(from(c in shelf(), where: c.id == ^conversation_id),
+        set: [message_count: count] ++ set
+      )
 
+    if changed > 0, do: Link.index_changed(conversation_id)
     :ok
   end
 

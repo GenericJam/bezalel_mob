@@ -22,7 +22,7 @@ Muster) applies on top.
 | **rho** (GenericJam/rho) | agent core: loop, sessions, tools, sign-in, Dyn, consulting another model | Hex, `~> 0.3` (attachments by reference; `Rho.Consult`, `ask_model`) (`sibling/2`) |
 | **mob_secure_store** (GenericJam/mob_secure_store) | Keychain / Keystore secrets plugin | GitHub, pinned until on Hex |
 | **mob_markdown** (GenericJam/mob_markdown) | native Markdown views (replies, tool results) | GitHub, pinned until on Hex |
-| mob_photos, mob_camera, mob_speech, mob_whisper, mob_media | photo library, camera, dictation, Whisper on the phone; media info, audio to PCM, video frames (Materials) | Hex (signed) |
+| mob_photos, mob_camera, mob_speech, mob_whisper, mob_media, mob_scanner | photo library, camera, dictation, Whisper on the phone; media info, audio to PCM, video frames (Materials); the QR scanner (Linked computers) | Hex (signed) |
 | mob, mob_dev | the framework | Hex |
 
 `BEZALEL_LOCAL_DEPS=1` uses the sibling checkouts (`../bezalel_core`,
@@ -418,6 +418,29 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   action (Choose a model, Billing page, Open Settings). Host tests:
   `test/bezalel/usage_screen_test.exs` (usage.json written in the run's
   data dir; Refresh answered through `config :bezalel, :usage_fetch`).
+- **Linked computers** (`Bezalel.Link`, `Bezalel.LinkedComputersScreen`;
+  decisions/2026-10-19-phone-link.md; the protocol is bezalel_core's
+  `Bezalel.Link.*`): the phone is the website's account. Its Ed25519
+  device key is in the secure store (`Bezalel.Link.Identity`; an
+  unreadable store is an error, never a new key). Settings → Linked
+  computers → Link a computer asks for the camera, scans the website's
+  QR code (`Bezalel.Native.scan_qr/1`, mob_scanner), claims it over the
+  phone's own connection (`Bezalel.Link.Dialer`: Mint.WebSocket to
+  `wss://<host>/link/phone`, frames sealed after the handshake, the
+  website's key pinned per origin in `Bezalel.Link.Store`) and shows the
+  browser, IP and place before Link. One dialer per website with linked
+  computers (or a pairing), reconnecting with backoff in the foreground,
+  closed 30 s into the background; Log out works offline (sent on the
+  next connect). A website's writes to a conversation and the phone's
+  own (Study's turns, `Bezalel.Link.Turns.phone_turn/2`; `Library`
+  edits) take that conversation's lock (`Bezalel.Link.Serve.locked/2`;
+  the decision's 2026-10-22 section). Host tests run against a fake website
+  (`test/support/link_server.ex`). On a device a scan can be stood in
+  for over dist: `Mob.Test.send_message(node, {:scan, :result, %{type:
+  :qr, value: qr_text}})` with the screen open. A hot push (`mix
+  mob.deploy` without `--native`) onto a running app reloads
+  `mob_secure_store_nif`'s stub and the next secure-store read crashes
+  the app: restart it after a push.
 - **Study tools** (`Bezalel.Study.*`, in **bezalel_core**): studybible-mcp's
   tools ported to Elixir as rho tool modules over the study packs
   (`data/`), with the system prompt (`Bezalel.Study.Prompt`); the live agent

@@ -26,6 +26,7 @@ defmodule Bezalel.Native do
   @callback thumbnail(Path.t(), keyword()) :: {:ok, %{path: Path.t()}} | {:error, term()}
   @callback save_photo(Mob.Socket.t(), Path.t(), keyword()) :: Mob.Socket.t()
   @callback action_sheet(Mob.Socket.t(), keyword()) :: Mob.Socket.t()
+  @callback scan_qr(Mob.Socket.t()) :: Mob.Socket.t()
 
   @doc "The photo library's picker (mob_photos): `{:photos, :picked | :cancelled, …}`."
   def pick_photos(socket, opts \\ []), do: impl().pick_photos(socket, opts)
@@ -82,6 +83,13 @@ defmodule Bezalel.Native do
 
   @doc "The platform's action sheet (`Mob.Alert.action_sheet/2`): `{:alert, action}`."
   def action_sheet(socket, opts), do: impl().action_sheet(socket, opts)
+
+  @doc """
+  The QR code scanner (mob_scanner; ask for the camera first): `{:scan,
+  :result, %{value: text}}`, `{:scan, :cancelled | :permission_denied |
+  :not_available}`.
+  """
+  def scan_qr(socket), do: impl().scan_qr(socket)
 
   defp impl, do: Application.get_env(:bezalel, :native, Bezalel.Native.Mob)
 end
@@ -142,4 +150,7 @@ defmodule Bezalel.Native.Mob do
 
   @impl true
   def action_sheet(socket, opts), do: Mob.Alert.action_sheet(socket, opts)
+
+  @impl true
+  def scan_qr(socket), do: MobScanner.scan(socket, formats: [:qr])
 end
