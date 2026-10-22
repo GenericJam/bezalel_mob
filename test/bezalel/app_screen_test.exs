@@ -211,11 +211,10 @@ defmodule Bezalel.AppScreenTest do
     assert length(assigns(view).messages) == count - 1
   end
 
-  test "building from the chat saves the sermon outline and opens it" do
+  test "a Workshop build without a model makes the design's sample and opens it" do
     view = mount_screen(AppScreen)
-    view = render_info(view, {:tap, {:study, :build_from_chat}})
-    assert assigns(view).tab == :workshop
-    assert assigns(view).desc =~ "Exodus 31:2–3"
+    view = render_info(view, {:tap, {:tab, :workshop}})
+    view = render_info(view, {:change, :desc, "A passage outline helper for Exodus 31:2–3"})
     # Without a model, the Workshop says what the build will make before it starts.
     assert text(view) =~ "Build the sample"
     assert text(view) =~ "No model is connected, so this builds the design’s sample"

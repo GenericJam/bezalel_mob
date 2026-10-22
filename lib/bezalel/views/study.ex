@@ -59,8 +59,6 @@ defmodule Bezalel.Views.Study do
     rows = Enum.map(assigns.messages, &message(&1, assigns))
     draft_change = {self(), :draft}
     send_tap = {self(), {:study, :send}}
-    build_tap = {self(), {:study, :build_from_chat}}
-    hammer = Icons.icon(:hammer, 18, :secondary)
 
     stop = if Reply.running?(stream), do: [stop: {self(), {:study, :stop}}], else: []
     # The usage meter heads what sits above the composer's field.
@@ -120,28 +118,6 @@ defmodule Bezalel.Views.Study do
             text_color={:muted}
           />
           {switch_note(@switched, model, live?)}
-          <Box
-            :if={@messages != []}
-            border_color={:border}
-            border_width={1}
-            corner_radius={20}
-            height={40}
-            padding_left={12}
-            padding_right={16}
-            align="center"
-            fill_width={false}
-            on_tap={build_tap}
-          >
-            <Row gap={8} align={:center}>
-              {hammer}
-              <Text
-                text="Build an outline tool from this"
-                font={:ui_medium}
-                text_size={14}
-                text_color={:on_background}
-              />
-            </Row>
-          </Box>
         </Column>
       </Scroll>
       <Text
@@ -991,13 +967,6 @@ defmodule Bezalel.Views.Study do
   def handle({:ask_lexeme, w}, socket) do
     draft = "Tell me about #{w["word"]} (#{w["translit"]}, #{w["strongs"]})"
     {:noreply, Socket.assign(socket, sheet: nil, tab: :study, draft: draft)}
-  end
-
-  def handle(:build_from_chat, socket) do
-    desc =
-      "A passage outline helper for #{passage_ref(socket.assigns.messages)}: its main idea, its movements, and the key words of each."
-
-    {:noreply, socket |> Socket.assign(desc: desc, build: nil) |> Helpers.go(:workshop)}
   end
 
   # A link in the chat (the NET's label on a passage card, a reply's sources).
@@ -1870,14 +1839,4 @@ defmodule Bezalel.Views.Study do
   defp summary_text(%{"text" => text}), do: text
   defp summary_text(%{"cut" => true, "rest" => rest}), do: rest
   defp summary_text(%{"first" => first, "rest" => rest}), do: String.trim(first <> " " <> rest)
-
-  defp passage_ref(messages) do
-    Enum.find_value(messages, "this passage", fn m ->
-      cond do
-        p = Scripture.passage(m.passage) -> p.ref
-        m.card -> m.card["title"]
-        true -> nil
-      end
-    end)
-  end
 end
