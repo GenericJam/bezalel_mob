@@ -6,6 +6,7 @@ defmodule Bezalel.StudyLibraryTest do
 
   alias Bezalel.{AppScreen, AttributionsScreen, Packs, Repo}
   alias Bezalel.Library.Conversation
+  alias Bezalel.Packs.Manifest
   alias Bezalel.Test.{Browser, MemoryStore, PackServer}
   alias Bezalel.Views.StudyLibrary
 
@@ -172,16 +173,22 @@ defmodule Bezalel.StudyLibraryTest do
              find(view, :text, text: "CC BY-NC 4.0")
   end
 
-  test "with the NET chosen and its pack not on the phone, the study library says the tools quote the BSB" do
+  test "with a translation from the translations pack chosen and the pack not on the phone, the study library says the tools quote the BSB" do
     view = settings()
-    assert text(view) =~ "Your translation, the NET Bible, needs the NET Bible pack."
-    assert StudyLibrary.title("translations") == "NET Bible"
+
+    assert text(view) =~
+             "Your translation, the NET Bible, is in the Bible translations pack. Until it's on this phone, the study tools quote the BSB from the core pack and say so."
+
+    assert StudyLibrary.title("translations") == "Bible translations"
+
+    view = render_info(view, {:tap, {:settings, {:translation, "jps1917"}}})
+    assert text(view) =~ "Your translation, the JPS 1917, is in the Bible translations pack."
 
     view = render_info(view, {:tap, {:settings, {:translation, "bsb"}}})
-    refute text(view) =~ "needs the NET Bible pack"
+    refute text(view) =~ "is in the Bible translations pack"
   end
 
-  test "a library with the translations pack lists it as the NET Bible, optional: download, then remove",
+  test "a library with the translations pack lists it as Bible translations, optional: download, then remove",
        ctx do
     translations = PackServer.pack("translations", "v2")
 
@@ -195,25 +202,29 @@ defmodule Bezalel.StudyLibraryTest do
     assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 2."}}, 5_000
     flush()
 
-    view = settings()
+    view = render_info(settings(), {:tap, {:settings, {:translation, "ult"}}})
     assert Enum.map(assigns(view).packs.packs, & &1.name) == ["core", "translations", "notes"]
     assert %{required: false} = Enum.find(assigns(view).packs.packs, &(&1.name == "translations"))
     text = text(view)
-    assert text =~ "NET Bible"
-    refute text =~ "NET Bible · needed"
-    assert text =~ "Your translation, the NET Bible, needs the NET Bible pack."
+    assert text =~ "Bible translations"
+    refute text =~ "Bible translations · needed"
+
+    missing =
+      "Your translation, the Literal Text (ULT, adapted), is in the Bible translations pack."
+
+    assert text =~ missing
     assert pack_button?(view, {:download, "translations"})
 
     view = render_info(view, {:tap, {:packs, {:download, "translations"}}})
     view = follow(view, notice("The translations pack is ready."))
     assert pack_button?(view, {:remove, "translations"})
-    refute text(view) =~ "needs the NET Bible pack"
-    assert text(view) =~ "NET Bible, from its pack on this phone."
+    refute text(view) =~ missing
+    assert text(view) =~ "From the Bible translations pack on this phone."
 
     view = render_info(view, {:tap, {:packs, {:remove, "translations"}}})
-    assert assigns(view).toast.text == "Removed the NET Bible pack."
+    assert assigns(view).toast.text == "Removed the Bible translations pack."
     assert pack_button?(view, {:download, "translations"})
-    assert text(view) =~ "needs the NET Bible pack"
+    assert text(view) =~ missing
   end
 
   test "a library with the scrolls pack lists it as the Dead Sea Scrolls, optional, after the ancient sources; a pack this app doesn't know is left out",
@@ -234,5 +245,40 @@ defmodule Bezalel.StudyLibraryTest do
     assert %{required: false} = Enum.find(assigns(view).packs.packs, &(&1.name == "scrolls"))
     assert text(view) =~ "Dead Sea Scrolls"
     assert pack_button?(view, {:download, "scrolls"})
+  end
+
+  test "data version 3's packs are listed, optional, in Settings' order", ctx do
+    assert Manifest.known() ==
+             ~w(core translations notes lxx witnesses ancient scrolls fathers dictionaries syntax graph)
+
+    optional =
+      for name <- ~w(syntax fathers graph witnesses dictionaries),
+          do: {name, PackServer.pack(name, "v3"), false}
+
+    PackServer.publish(ctx.server, ctx.base, 3, [{"core", ctx.core, true} | optional])
+    :ok = Packs.check()
+    assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 3."}}, 5_000
+    flush()
+
+    view = settings()
+
+    assert Enum.map(assigns(view).packs.packs, & &1.name) ==
+             ~w(core witnesses fathers dictionaries syntax graph)
+
+    text = text(view)
+
+    for {name, title} <- [
+          {"witnesses", "Textual witnesses (Samaritan Pentateuch, SBLGNT, HOTTP)"},
+          {"fathers", "Apostolic Fathers"},
+          {"dictionaries", "UBS Hebrew and Greek dictionaries"},
+          {"syntax", "Clause structure (MACULA)"}
+        ] do
+      assert StudyLibrary.title(name) == title
+      assert text =~ title
+      assert %{required: false} = Enum.find(assigns(view).packs.packs, &(&1.name == name))
+      assert pack_button?(view, {:download, name})
+    end
+
+    assert_renderable(view)
   end
 end

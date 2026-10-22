@@ -24,8 +24,11 @@ of them shipped.
 | STEPBible TEGMC, TEHMC | Morphology codes (`morphology` → core) | same | CC BY 4.0 |
 | Brown-Driver-Briggs, unabridged (1906), formatted by Eliran Wong | Hebrew lexicon (`lexicon` → core) | github.com/eliranwong/unabridged-BDB-Hebrew-lexicon @ `6e8326c6` | Public domain |
 | G. Abbott-Smith, *A Manual Greek Lexicon of the NT* (1922), TEI by translatable-exegetical-tools | Greek lexicon enrichment (`lexicon` → core) | github.com/translatable-exegetical-tools/Abbott-Smith @ `4048093c` | Public domain |
-| Berean Standard Bible | **The English the tools quote** when the user chooses the BSB, or when the NET's pack isn't on the phone (`bsb_verses` → core); also the text the similar-passage vectors are computed from | bereanbible.com/bsb.txt (sha256 pinned in studybible-mcp `parsers/bsb.py`) | Public domain (dedicated by the publisher) |
+| Berean Standard Bible | **The English the tools quote** when the user chooses the BSB, when the translations pack isn't on the phone, and for a book the chosen translation doesn't have (labelled BSB on that verse) (`bsb_verses` → core); also the text the similar-passage vectors are computed from | bereanbible.com/bsb.txt (sha256 pinned in studybible-mcp `parsers/bsb.py`) | Public domain (dedicated by the publisher) |
 | NET Bible® (Biblical Studies Press, 2019 text) | **The English the tools quote by default** (`translations`, `translation_verses` → translations; built by bezalel_core's `data/`, `mix bezalel.data.net`). The verse text only: none of the NET's translators' notes | labs.bible.org/api (formatting=full, one request per book, each response sha256-pinned in bezalel_core `data/pins.json`) | **Free non-commercial use by permission** (netbible.com/copyright): "(NET)" after each quotation, NET linked to http://netbible.org, text unaltered, acknowledgement shown |
+| JPS 1917, *The Holy Scriptures according to the Masoretic Text* (Jewish Publication Society of America), eBible.org's USFM | The English the tools quote when the user chooses the JPS; Old Testament only (`translation_verses` → translations). eBible's inline Hebrew verse numbers removed, the Psalm titles numbered verse 0 | eBible.org/Scriptures/engjps_usfm.zip (sha256 in bezalel_core `data/pins.json` → `jps`) | Public domain |
+| Literal Text (ULT, adapted), from unfoldingWord® Literal Text, Door43 release v91 | The English the tools quote when the user chooses the ULT; the books released so far (not Numbers, 1–2 Chronicles, Ecclesiastes, Isaiah, Jeremiah or Ezekiel) (`translation_verses` → translations). Word alignment, footnotes and headings removed; shown without the unfoldingWord® trademark, as its licence asks | git.door43.org/unfoldingWord/en_ult @ `35d21595` (tag v91; sha256 per file in `data/pins.json` → `ult`) | CC BY-SA 4.0 |
+| Simplified Text (UST, adapted), from unfoldingWord® Simplified Text, Door43 release v91 | The English the tools quote when the user chooses the UST; the same released books as the ULT (`translation_verses` → translations). Changed as the ULT | git.door43.org/unfoldingWord/en_ust @ `85f274a7` (tag v91; sha256 per file in `data/pins.json` → `ust`) | CC BY-SA 4.0 |
 | OpenBible.info cross references (Treasury of Scripture Knowledge plus votes) | `cross_references` → core (`type = 'tsk'`) | a.openbible.info/data/cross-references.zip, file dated 2026-10-12, vendored as `vendor/openbible-cross-references-2026-10-12.txt.zst` (the published file is regenerated in place) | CC BY 4.0 |
 | ACAI Biblical Entity Data (BiblioNexus, via BibleAquifer) | People, places, groups, key terms (`acai_entities` → core) | github.com/BibleAquifer/ACAI @ `7e6a2d66` | CC BY-SA 4.0 |
 | Torah Weave, Moshe Kline | Literary units of the Torah (`torah_weave_units`, `torah_weave_cells` → core) | `data/torah_weave/torah-units.json` in studybible-mcp (from chaver.com) | CC BY 4.0 |
@@ -52,6 +55,13 @@ of them shipped.
 | 4 Ezra: KJV Apocrypha (eBible.org eng-kjv) and Clementine Vulgate Latin (Latin Wikisource rev. 148869) | `ancient_source_*` → ancient | sha256/revision pinned in studybible-mcp | English: public domain (see note on the KJV); Latin transcription: CC BY-SA 4.0 |
 | Ancient-source editorial notes and biblical links (studybible-mcp) | `ancient_source_notes`, `ancient_source_biblical_links` → ancient | `src/study_bible_mcp/corpora/` | MIT |
 | Theographic Bible Metadata (Robert Rouse) | People, places, events, family edges, verse mentions (`graph_*` → graph) | github.com/robertrouse/theographic-bible-metadata @ `52e049ef` (People, Places, Events, PeopleGroups CSVs). Its rows carry Easton's Bible Dictionary text (1897, public domain) and OpenBible.info Bible Geocoding coordinates (CC BY 4.0) | CC BY-SA 4.0 |
+| DT-UCPH/sp, Text-Fabric Dataset of the Samaritan Pentateuch (Højgaard, Naaijer & Schorch) | Samaritan Pentateuch consonantal text, Genesis–Deuteronomy (`sp_verses` → witnesses) | github.com/DT-UCPH/sp @ `6da31aa` (tag v7.2.4; sha256 per file in bezalel_core `data/pins.json` → `sp`) | **CC BY-NC 4.0** |
+| SBL Greek New Testament and its apparatus (Faithlife/SBLGNT) | Greek NT text and the apparatus's variation units (`sblgnt_verses`, `sblgnt_apparatus` → witnesses) | github.com/Faithlife/SBLGNT @ `c4d241a` (sha256 per file in `data/pins.json` → `sblgnt`) | CC BY 4.0 |
+| UBS Hebrew Old Testament Text Project (HOTTP), Preliminary and Interim Report | Text-critical entries: readings, ratings, factors, English (`hottp_*` → witnesses) | github.com/ubsicap/ubs-open-license @ `a15a96c` `HOTTP/` (sha256 in `data/pins.json` → `hottp`) | CC BY-SA 4.0 |
+| Open Apostolic Fathers 1.0 (James Tauber and Seumas Macdonald, 2019), a corrected text of Kirsopp Lake's edition (1912–1913) | The Apostolic Fathers' Greek (and Latin), 18 works (`ancient_source_*`, corpus `apostolic_fathers` → fathers) | github.com/jtauber/apostolic-fathers @ `a07f9207` `texts/` (sha256 per file in `data/pins.json` → `fathers.greek`) | CC BY-SA 4.0 |
+| CAFE, the Contemporary Apostolic Fathers Edition (James Cuénod, 2024): **a machine translation** drafted with GPT-4o | The English beside each Greek line, labelled a machine translation wherever it is shown (`ancient_source_*` → fathers) | github.com/jcuenod/CAFE @ `06b19aec` (sha256 per file in `data/pins.json` → `fathers.english`) | CC BY-SA 4.0 |
+| UBS Dictionary of Biblical Hebrew (v0.9.4) and UBS Dictionary of the Greek New Testament (v1.1), English, with their semantic domains | Senses, glosses and domains by Strong's number (`dictionary_*` → dictionaries) | github.com/ubsicap/ubs-open-license @ `a15a96cf` `dictionaries/` (sha256 per file in `data/pins.json` → `ubs_dictionaries`) | CC BY-SA 4.0 |
+| Clear-Bible MACULA Hebrew (WLC) and Greek (SBLGNT) Linguistic Datasets, the lowfat syntax trees | Clause structure per verse: each clause's subject, verb, object… with their words (`syntax_*` → syntax). The UBS semantic attributes MACULA uses by permission, and the SIL Hebrew glosses (SILHA), are not imported | github.com/Clear-Bible/macula-hebrew @ `47db250b`, github.com/Clear-Bible/macula-greek @ `8423afe4` (sha256 per file in bezalel_core `data/macula_files.json`, from `data/pins.json` → `macula`) | CC BY 4.0 (WLC text and Berean glosses: public domain) |
 
 The `ancient_source_passages` rows carry their own `edition`, `license`,
 `original_license`, `translation_license` and source URL, so the app can show the
@@ -112,7 +122,8 @@ CC-licensed item:
 The notice links to how the database is built:
 https://github.com/GenericJam/bezalel_mob/blob/master/data/README.md
 
-Each string below also ends with "Modified." where the source is CC-licensed.
+Each string below also ends with "Modified." where the source is CC-licensed
+(the ULT's and UST's say instead what changed, as their licence asks).
 Strings to use verbatim:
 
 1. **STEP Bible** — "Hebrew and Greek texts, morphology, lexicons and proper names
@@ -201,36 +212,112 @@ Strings to use verbatim:
     `Translations.get("net").copyright`). Licence line: "Free non-commercial use
     by permission (netbible.com/copyright). The NET's translators' notes are not
     included." Link: http://netbible.org
+25. **Samaritan Pentateuch** — "The Samaritan Pentateuch: Christian Canu
+    Højgaard, Martijn Naaijer and Stefan Schorch, Text-Fabric Dataset of the
+    Samaritan Pentateuch (Zenodo, 2023, doi:10.5281/zenodo.7734632), DT-UCPH/sp,
+    CC BY-NC 4.0; the text of MS Dublin Chester Beatty Library 751 and MS
+    Garizim 1 as transcribed by the Samaritanus project (Stefan Schorch, Halle).
+    Modified." Links: https://github.com/DT-UCPH/sp and
+    https://doi.org/10.5281/zenodo.7734632
+26. **SBL Greek New Testament** — "The SBL Greek New Testament and its
+    apparatus, copyright 2010 by the Society of Biblical Literature and Logos
+    Bible Software, CC BY 4.0, from Faithlife/SBLGNT. Modified." Links:
+    https://sblgnt.com and https://github.com/Faithlife/SBLGNT
+27. **Hebrew Old Testament Text Project** — "Preliminary and Interim Report on
+    the Hebrew Old Testament Text Project (HOTTP), © United Bible Societies
+    1973-1980, 2003-2023, CC BY-SA 4.0, from ubsicap/ubs-open-license (the
+    English text). Modified." Link:
+    https://github.com/ubsicap/ubs-open-license/tree/main/HOTTP
+28. **JPS 1917** — "The Holy Scriptures according to the Masoretic Text: A New
+    Translation (Jewish Publication Society of America, 1917), public domain,
+    from eBible.org. Modified: eBible's inline Hebrew verse numbers removed and
+    the Psalm titles numbered verse 0." Link:
+    https://ebible.org/find/details.php?id=engjps
+29. **Literal Text (ULT, adapted)** — "Literal Text (ULT, adapted): adapted from
+    a work copyright © 2022 by unfoldingWord, licensed CC BY-SA 4.0
+    (https://creativecommons.org/licenses/by-sa/4.0/). The original work by
+    unfoldingWord is available from unfoldingword.org/ult. Changes: the word
+    alignment, footnotes and headings are removed, the Psalm titles numbered
+    verse 0 and 2 Corinthians 13:13 numbered 13:14; the verse text is otherwise
+    unaltered. This adaptation is available under the same licence." (verbatim,
+    as bezalel_core's `Translations.get("ult").copyright`). Links:
+    https://www.unfoldingword.org/ult and https://git.door43.org/unfoldingWord/en_ult
+30. **Simplified Text (UST, adapted)** — "Simplified Text (UST, adapted):
+    adapted from a work copyright © 2022 by unfoldingWord, licensed CC BY-SA 4.0
+    (https://creativecommons.org/licenses/by-sa/4.0/). The original work by
+    unfoldingWord is available from unfoldingword.org/ust. Changes: the word
+    alignment, footnotes and headings are removed, the Psalm titles numbered
+    verse 0 and 2 Corinthians 13:13 numbered 13:14; the verse text is otherwise
+    unaltered. This adaptation is available under the same licence." (verbatim,
+    as `Translations.get("ust").copyright`). Links:
+    https://www.unfoldingword.org/ust and https://git.door43.org/unfoldingWord/en_ust
+31. **Apostolic Fathers** — "The Apostolic Fathers: Greek (and Latin) text from
+    Open Apostolic Fathers 1.0, edited by James Tauber and Seumas Macdonald
+    (2019), a corrected text of Kirsopp Lake's edition (1912–1913),
+    doi:10.5281/zenodo.2555673, CC BY-SA 4.0; English from CAFE, the
+    Contemporary Apostolic Fathers Edition by James Cuénod (2024), a machine
+    translation drafted with GPT-4o, CC BY-SA 4.0. Modified." Links:
+    https://github.com/jtauber/apostolic-fathers and https://github.com/jcuenod/CAFE
+32. **UBS Dictionary of Biblical Hebrew** — "UBS Dictionary of Biblical Hebrew
+    © United Bible Societies, 2023. Adapted from Semantic Dictionary of Biblical
+    Hebrew © 2000-2023 United Bible Societies. Licensed under CC BY-SA 4.0.
+    Modified." Links:
+    https://translation.bible/tools-resources/ubs-dictionary-of-biblical-hebrew/
+    and https://github.com/ubsicap/ubs-open-license/tree/main/dictionaries/hebrew
+33. **UBS Dictionary of the Greek New Testament** — "UBS Dictionary of New
+    Testament Greek, © United Bible Societies, 2023. Adapted from Semantic
+    Dictionary of Biblical Greek: © United Bible Societies 2018-2023, which is
+    adapted from Greek-English Lexicon of the New Testament: Based on Semantic
+    Domains, Eds. J P Louw, Eugene Albert Nida © United Bible Societies 1988,
+    1989. Licensed under CC BY-SA 4.0. Modified." Links:
+    https://translation.bible/tools-resources/ubs-dictionary-of-the-greek-new-testament/
+    and https://github.com/ubsicap/ubs-open-license/tree/main/dictionaries/greek
+34. **MACULA syntax trees** — "Clause structure from the MACULA Hebrew
+    Linguistic Datasets, available at https://github.com/Clear-Bible/macula-hebrew/,
+    and the MACULA Greek Linguistic Datasets, available at
+    https://github.com/Clear-Bible/macula-greek/, © 2022-2024 Biblica, Inc, CC BY
+    4.0: syntax trees of the Westminster Leningrad Codex (public domain) with the
+    Westminster Hebrew Syntax (J. Alan Groves Center for Advanced Biblical
+    Research, CC BY 4.0), OpenScriptures Hebrew Bible morphology (CC BY 4.0) and
+    Cherith glosses (Andi Wu, Cherith Analytics, CC BY 4.0); and of the SBL Greek
+    New Testament (Society of Biblical Literature and Logos Bible Software, CC BY
+    4.0) with Berean Interlinear Bible glosses (public domain) and Cherith glosses
+    (CC BY 4.0). The United Bible Societies' semantic data MACULA uses by
+    permission, and the SIL Hebrew glosses (SILHA) it carries, are not included.
+    Modified." Links: https://github.com/Clear-Bible/macula-hebrew and
+    https://github.com/Clear-Bible/macula-greek
 
 Under a heading such as "Summaries of scholarship", the screen also credits the
 authors whose work studybible-mcp summarises (no licence applies; these are
 credits, and the summaries are studybible-mcp's own words):
 
-25. **Michael S. Heiser** — "Summaries of, and textual-variant analysis from, the
+35. **Michael S. Heiser** — "Summaries of, and textual-variant analysis from, the
     published work of Michael S. Heiser, including 'Deuteronomy 32:8 and the Sons
     of God' (Bibliotheca Sacra, 2001), 'Monotheism, Polytheism, Monolatry, or
     Henotheism?' (Bulletin for Biblical Research, 2008), his articles in the
     Faithlife Study Bible and the Lexham Bible Dictionary, and the Naked Bible
     Podcast." Link: https://drmsh.com
-26. **John Stott** — "Summaries of John Stott's The Cross of Christ, Basic
+36. **John Stott** — "Summaries of John Stott's The Cross of Christ, Basic
     Christianity, and The Message of Romans, Galatians, Ephesians, Acts and the
     Sermon on the Mount (The Bible Speaks Today), and Baptism and Fullness."
-27. **John Lennox** — "Summaries of John Lennox's Seven Days That Divide the World,
+37. **John Lennox** — "Summaries of John Lennox's Seven Days That Divide the World,
     Against the Flow, Joseph, and Determined to Believe?"
-28. **Bradley** — "Summary of Bradley, 'Two Fathers Only: Rival Pater Familias and
+38. **Bradley** — "Summary of Bradley, 'Two Fathers Only: Rival Pater Familias and
     the Organizing Binary of Scripture'."
-29. **Andrew Remington Rillera** — "Ancient Near East context entries summarising
+39. **Andrew Remington Rillera** — "Ancient Near East context entries summarising
     Andrew Remington Rillera, Lamb of the Free (Cascade Books, 2024), and the work
     of Jacob Milgrom on which it builds."
-30. **John Owen** — "Summaries of John Owen's works (public domain), linking the
+40. **John Owen** — "Summaries of John Owen's works (public domain), linking the
     texts at the Christian Classics Ethereal Library." Link: https://ccel.org/ccel/owen
 
 ## Obligations that follow
 
 - **Non-commercial (CC BY-NC):** the Dead Sea Scrolls and the Metsudah English are
-  in the ancient pack, and the whole scrolls pack is the Dead Sea Scrolls. Bezalel
-  is free with no ads (Decisions, 3); if that ever changed, those two would have to
-  come out of the ancient pack, and the scrolls pack be withdrawn, first.
+  in the ancient pack, the whole scrolls pack is the Dead Sea Scrolls, and the
+  Samaritan Pentateuch (DT-UCPH/sp) is in the witnesses pack, its credit shown
+  with every reading. Bezalel is free with no ads (Decisions, 3); if that ever
+  changed, those two would have to come out of the ancient pack, the Samaritan
+  Pentateuch out of the witnesses pack, and the scrolls pack be withdrawn, first.
 - **NET Bible (permission, non-commercial):** quoted under the publisher's
   permission for free non-commercial use (netbible.com/copyright). Every quotation
   is followed by "(NET)", in software on the internet with "NET" linked to
@@ -239,12 +326,21 @@ credits, and the summaries are studybible-mcp's own words):
   The translators' notes are not licensed and are not in the pack. As with BY-NC,
   if Bezalel ever charged or carried ads, the NET would have to come out first.
 - **ShareAlike (CC BY-SA):** our adapted versions (the pack tables holding ACAI,
-  Aquifer, Theographic, Josephus, Philo and the Latin 4 Ezra) must be offered under
-  CC BY-SA 4.0. Each pack file is a collection of separately licensed tables and
-  rows, so the BY-SA and BY-NC material are not merged into one adaptation. Say on
-  the attributions screen that the database packs are available under the licences
-  of their sources, and keep the packs downloadable as plain files (they are, from
-  the hosting in `bezalel-e47.5`), which also keeps them outside app-store DRM.
+  Aquifer, Theographic, Josephus, Philo, the Latin 4 Ezra, the ULT and UST, the
+  HOTTP, the Apostolic Fathers' Greek and CAFE's English, and the UBS
+  dictionaries) must be offered under CC BY-SA 4.0. Each pack file is a
+  collection of separately licensed tables and rows, so the BY-SA and BY-NC
+  material are not merged into one adaptation. Say on the attributions screen
+  that the database packs are available under the licences of their sources,
+  and keep the packs downloadable as plain files (they are, from the hosting in
+  `bezalel-e47.5`), which also keeps them outside app-store DRM. The ULT and UST
+  are shown without the unfoldingWord® trademark and with what changed, as their
+  licence asks (strings 29 and 30).
+- **Machine translation:** CAFE's English of the Apostolic Fathers is GPT-4o's,
+  published without systematic human revision. Every place it is shown says it
+  is a machine translation (the tools' passage labels, and the apps' Sources
+  lists mark the citation "Machine translation (AI-generated)"), so it is never
+  passed off as a human translator's.
 - **KJV in the United Kingdom:** the Authorized Version is public domain everywhere
   except the UK, where the Crown's letters patent apply. It reaches the packs only
   as the English of 4 Ezra (2 Esdras 3–14). Low risk; noted for completeness.

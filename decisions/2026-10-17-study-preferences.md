@@ -1,6 +1,6 @@
 # Study preferences: a minimal fixed prompt, an editable approach, sources the user can switch off
 - Date: 2026-10-17
-- Status: accepted
+- Status: accepted; the "English" bullet amended by 2026-10-22-study-data-v3.md
 
 ## Context
 Bezalel's system prompt came from studybible-mcp, framed for evangelical

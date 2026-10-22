@@ -362,7 +362,8 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   (`Reply.sources/1` live, the message's `citations` stored) that opens to
   the list grouped by work, the ones the reply links first, then "Also
   consulted"; pages open through Study's `{:open_url, url}`, books are
-  text, and AI translations and the unpublished draft rendering carry
+  text, and AI translations, machine translations (CAFE's English of the
+  Apostolic Fathers, `:machine`) and the unpublished draft rendering carry
   their marks and links to the originals. Open or not is the reply's
   `"<id>:sources"` key in `expanded`.
 - Data: `Bezalel.Library`: each conversation's transcript is its rho
@@ -536,10 +537,14 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   the user's `Bezalel.Study.Preferences`, kept in `Mob.State` under
   `:bezalel_study_preferences` as a plain map (`Bezalel.Settings.study_preferences/0,1`,
   `put_study_preferences/1`, `update_study_preferences/1`, normalised by
-  `Preferences.new/1`). On the tab: Translation (NET, the default, or BSB;
-  the NET needs the translations pack, "NET Bible" in the study library and
-  in `Bezalel.Packs.Manifest.known/0`, optional,
-  and without it the tools quote the BSB and say so), Results per list
+  `Preferences.new/1`). On the tab: Translation, a row opening a chooser
+  sheet (`:translations`, like the models'; decisions/2026-10-22-study-data-v3.md)
+  with the NET (the default), BSB, JPS 1917, ULT and UST, each with
+  `Views.Settings.translation_note/2` (what it is, what it covers, whether
+  the phone has it). All but the BSB are in the translations pack ("Bible
+  translations" in the study library and `Bezalel.Packs.Manifest.known/0`,
+  optional); without it the tools quote the BSB and say so, and a book the
+  chosen translation lacks is quoted from the BSB. Then Results per list
   (4 / 8 / 12 / 20), Scripture labels (Show / Hide), and two rows opening
   pushed screens, both pushed with `%{app: self()}` and telling the app's
   screen `{:study_preferences, :changed}` when they store a change:
@@ -555,8 +560,9 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   (`Live.phone_formatting/0`; core has no platform formatting), and
   withholds `Bezalel.Study.Tools.withheld(prefs)` beside the `dyn_*`
   tools. The passage card labels the translation the tool quoted
-  (`result.translation`) and, for the NET, ends its last verse with
-  "(NET)" linked to netbible.org, as its terms ask.
+  (`result.translation`); a verse the BSB stands in for carries its own
+  `"version"` and is drawn with "(BSB)" after it; for the NET the last
+  verse ends with "(NET)" linked to netbible.org, as its terms ask.
   Tests: `test/bezalel/settings_test.exs` ("study"),
   `test/bezalel/live_agent_test.exs` ("study preferences"); a test that
   mounts the app clears `:bezalel_study_preferences` in its setup.
@@ -601,10 +607,12 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   `Documents/packs` at startup. On
   first launch a sheet offers the core pack (26 MB download, 182 MB on the
   phone); Settings → Study library downloads, updates ("Check for
-  updates") and removes packs (the optional ones: NET Bible, notes,
-  Septuagint, ancient sources, Dead Sea Scrolls (`scrolls`, from data
-  version 2; decisions/2026-10-18-scrolls-pack-optional.md), people and
-  places), shows storage used, and opens Sources and
+  updates") and removes packs (the optional ones: Bible translations,
+  notes, Septuagint, textual witnesses, ancient sources, Dead Sea Scrolls
+  (`scrolls`, from data version 2; decisions/2026-10-18-scrolls-pack-optional.md),
+  Apostolic Fathers, UBS dictionaries, clause structure (`syntax`), people
+  and places; witnesses, fathers, dictionaries and syntax from data version
+  3), shows storage used, and opens Sources and
   licences (`Bezalel.AttributionsScreen`, laying out bezalel_core's
   `Bezalel.Study.Credits`, from `data/SOURCES.md`; change both together). `Bezalel.Packs` runs outside the screen: one download at
   a time, resumed with a Range request after a dropped connection or a

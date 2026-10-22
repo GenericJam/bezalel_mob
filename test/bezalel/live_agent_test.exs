@@ -232,6 +232,47 @@ defmodule Bezalel.LiveAgentTest do
       refute loop?(view)
       refute MapSet.member?(assigns(view).stale, cid)
     end
+
+    test "the chosen translation labels the card; a verse the BSB stands in for carries its own (BSB)" do
+      Settings.update_study_preferences(&%{&1 | translation: "jps1917"})
+
+      script([
+        [@lookup],
+        [{:text, "Bezalel."}],
+        [{:tool_call, "c2", "word_study", %{"strongs" => "H7307"}}],
+        [{:text, "Ruach."}]
+      ])
+
+      # The JPS quoted: the card says so, and no verse claims another.
+      view = AppScreen |> mount_screen() |> ask("Who is Bezalel?") |> until()
+      jps = List.last(assigns(view).messages).card
+      assert jps["version"] == "JPS"
+      # JPS 1917's wording (the NET has "I have chosen", the BSB a closing quote).
+      assert Enum.map_join(hd(jps["verses"])["tokens"], " ", &hd/1) =~
+               "'See, I have called by name Bezalel the son of Uri"
+
+      assert "JPS" in texts(view)
+      refute "(BSB)" in texts(view)
+      refute "(NET)" in texts(view)
+
+      # The ULT lacks Ezekiel: that example is the BSB's, labelled on its row.
+      view = render_info(view, {:tap, {:settings, {:translation, "ult"}}})
+      view = view |> ask("And ruach?") |> until()
+      card = List.last(assigns(view).messages).card
+      assert card["version"] == "ULT"
+      ezekiel = Enum.find(card["verses"], &(&1["ref"] =~ "27:26"))
+      assert ezekiel["version"] == "BSB"
+
+      [row] =
+        view
+        |> find_all(:wrap)
+        |> Enum.filter(&(find(&1, :text, text: ezekiel["ref"]) != nil))
+
+      assert List.last(row.children).props.text == "(BSB)"
+      # Only that row: the card's ULT rows carry no label of their own.
+      assert Enum.count(texts(view), &(&1 == "(BSB)")) == 1
+      assert "ULT" in texts(view)
+    end
   end
 
   test "Markdown renders natively: the summary as it streams, thinking and tool results opened; headers stay plain text" do

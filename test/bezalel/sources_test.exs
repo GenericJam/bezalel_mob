@@ -182,6 +182,26 @@ defmodule Bezalel.SourcesTest do
       assert links(tree) == [original.url, original.url]
     end
 
+    test "a machine translation: marked as such, not the assistant's nor a human translator's, linked to its original" do
+      lake =
+        "https://raw.githubusercontent.com/jtauber/apostolic-fathers/a07f920/texts/021-didache.txt"
+
+      cafe = %Citation{
+        work: "apostolic_fathers",
+        label: "Didache 1.1 (CAFE, machine translation)",
+        url: "https://github.com/jcuenod/CAFE/blob/06b19ae/021-didache.txt",
+        translation: :machine,
+        original: [%{label: "Didache 1.1 (Lake)", url: lake}]
+      }
+
+      tree = open_list([cafe])
+      shown = texts(tree)
+      assert "Machine translation (AI-generated), not a human translator's" in shown
+      refute Enum.any?(shown, &String.starts_with?(&1, "AI translation"))
+      assert "Original:" in shown
+      assert links(tree) == [cafe.url, lake]
+    end
+
     test "a published record has no mark; a book is its reference as text, and a licence shows" do
       book = %Citation{
         work: "fee_stuart",

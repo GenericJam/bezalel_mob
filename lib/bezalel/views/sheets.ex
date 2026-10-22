@@ -1,15 +1,17 @@
 defmodule Bezalel.Views.Sheets do
   @moduledoc """
-  The bottom sheets: choose a model (to answer, to push back, to draw),
-  the conversation's menu, confirm a delete, a Hebrew word (the
-  storyboard's, or a word from a live reply's passage card), the
-  first-launch offer of the core study pack, approving a Workshop proposal.
+  The bottom sheets: choose a model (to answer, to push back, to draw) or
+  the translation the study tools quote, the conversation's menu, confirm
+  a delete, a Hebrew word (the storyboard's, or a word from a live reply's
+  passage card), the first-launch offer of the core study pack, approving
+  a Workshop proposal.
   """
   import Mob.Sigil
 
   alias Bezalel.{Models, Scripture}
   alias Bezalel.Study.Tools.DrawImage
-  alias Bezalel.Views.{Attach, Stills, Study, StudyLibrary, Workshop}
+  alias Bezalel.Study.Translations
+  alias Bezalel.Views.{Attach, Settings, Stills, Study, StudyLibrary, Workshop}
   alias MobBezalel.UI
 
   @doc "The sheet for `assigns.sheet`, or nothing."
@@ -142,6 +144,36 @@ defmodule Bezalel.Views.Sheets do
       end
 
     [sheet_title("Pictures by", "Draws when a reply calls for a picture"), automatic | rows]
+  end
+
+  # Translation: every translation the tools can quote, each saying what it
+  # covers and whether this phone has it; one not on the phone can still be
+  # chosen (the tools quote the BSB until it is, and say so).
+  defp content(:translations, assigns) do
+    current = assigns.study.translation
+
+    rows =
+      for t <- Translations.all() do
+        choice_row(%{
+          id: "translation-" <> t.key,
+          name: t.name,
+          note: Settings.translation_note(t.key, assigns.packs),
+          dot: nil,
+          selected: t.key == current,
+          tap: {self(), {:settings, {:translation, t.key}}}
+        })
+      end
+
+    [
+      sheet_title("Translation", "The English the study tools quote"),
+      rows,
+      ~MOB(<Text
+  text="The words and Strong's numbers are STEPBible's whichever you choose. Credits and licences: Settings → Study library → Sources and licences."
+  text_size={12}
+  line_height={1.45}
+  text_color={:muted}
+/>)
+    ]
   end
 
   defp content({:delete_material, id}, _assigns) do
