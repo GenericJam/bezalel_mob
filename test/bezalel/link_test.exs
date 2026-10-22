@@ -1119,13 +1119,15 @@ defmodule Bezalel.LinkTest do
     {_offer, _session} = link(server)
     pid = dialer()
 
-    request = Task.async(fn -> Dialer.request(pid, "test.ignore", %{}, 50) end)
+    # Long enough that the sessions are gone before it times out, even on a
+    # slow runner: the stop check runs at the timeout.
+    request = Task.async(fn -> Dialer.request(pid, "test.ignore", %{}, 1_000) end)
     assert eventually(fn -> "test.ignore" in LinkServer.ops(server) end)
     Store.put_sessions(@origin, [])
     ref = Process.monitor(pid)
 
     assert Task.await(request) == {:error, :timeout}
-    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1_000
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 2_000
   end
 
   test "reconnects back off from about a second to a minute, with jitter" do
