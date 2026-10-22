@@ -61,5 +61,5 @@ the JPS has no New Testament; this ULT and UST release has no Numbers,
 - A phone with the data version 2 translations pack quotes the NET from it
   but the BSB for the JPS, ULT and UST until the pack is updated; Settings
   says so once a check has seen the update.
-- The pin bump to the pushed bezalel_core commit is a separate step; until
-  then this branch's tests pass only with `BEZALEL_LOCAL_DEPS=bezalel_core`.
+- The app needs bezalel_core 7cda29d or later (the `:machine` citation kind,
+  per-row card versions, the new translation keys); `mix.exs` pins it.
