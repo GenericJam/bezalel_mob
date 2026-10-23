@@ -566,6 +566,16 @@ defmodule Bezalel.LinkTest do
     )
 
     LinkServer.push(server, Wire.frame("conv.pull", %{uid: uid, from: 0, id: %{"bad" => "id"}}))
+
+    # The deletion races the pulls above; wait for their answers first so
+    # "past" is judged against the live conversation.
+    assert eventually(fn ->
+             Enum.count(
+               LinkServer.frames(server),
+               &(&1["re"] in ~w(path negative past missing))
+             ) == 4
+           end)
+
     {:ok, _deleted} = Library.delete_conversation(conversation.id)
     LinkServer.push(server, Wire.frame("conv.pull", %{uid: uid, from: 0}, "off-shelf"))
 
