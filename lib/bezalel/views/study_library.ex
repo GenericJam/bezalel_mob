@@ -62,13 +62,14 @@ defmodule Bezalel.Views.StudyLibrary do
     do: Enum.any?(status.packs, &(&1.name == name and &1.installed != nil))
 
   # The translation keys the translations pack on the phone holds
-  # (`:pack_translations`: nil while it isn't installed, `:unreadable` for a
-  # damaged file): a pack from before data version 3 has only the NET,
-  # whether or not a check has seen the update yet. The file's stamp (inode,
-  # size, mtime: a download renames a new file into place) is taken here;
-  # when it changes the pack is read off the screen
-  # (`start_async`), the last value kept meanwhile, and the result kept only
-  # if the stamp still matches (`translations_read/2`).
+  # (`:pack_translations`: nil while it isn't installed, `:loading` while an
+  # installed pack is first read, `:unreadable` for a damaged file): a pack
+  # from before data version 3 has only the NET, whether or not a check has
+  # seen the update yet. The file's stamp (inode, size, mtime: a download
+  # renames a new file into place) is taken here; when it changes the pack
+  # is read off the screen (`start_async`), the last read value kept
+  # meanwhile (`:loading` when there is none), and the result kept only if
+  # the stamp still matches (`translations_read/2`).
   defp pack_translations(socket) do
     status = socket.assigns.packs
     file = Path.join(status.dir, "translations.sqlite")
@@ -91,7 +92,7 @@ defmodule Bezalel.Views.StudyLibrary do
         socket
         |> Socket.assign(
           pack_translations_stamp: stamp,
-          pack_translations: Map.get(socket.assigns, :pack_translations)
+          pack_translations: Map.get(socket.assigns, :pack_translations) || :loading
         )
         |> Socket.start_async(:pack_translations, fn ->
           {stamp, read_pack_translations(file)}
@@ -323,6 +324,9 @@ defmodule Bezalel.Views.StudyLibrary do
   defp translation_note(%{translation: key}, in_pack) do
     case Translations.get(key) do
       %{key: "bsb"} ->
+        []
+
+      _translation when in_pack == :loading ->
         []
 
       %{name: name} when in_pack == nil ->

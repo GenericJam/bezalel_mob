@@ -248,8 +248,15 @@ defmodule Bezalel.StudyLibraryTest do
     assert %{installed: %{}, update: false} =
              Enum.find(assigns(view).packs.packs, &(&1.name == "translations"))
 
-    # The pack is read off the screen: nothing claimed until it's read.
-    assert assigns(view).pack_translations == nil
+    # The pack is read off the screen: until it's read, nothing is said
+    # about it, neither missing nor on the phone.
+    assert assigns(view).pack_translations == :loading
+    loading = text(view)
+    assert loading =~ "Biblical Studies Press, 2019; quoted by permission. The whole Bible."
+    refute loading =~ "Needs the Bible translations pack"
+    refute loading =~ "Your translation, the NET Bible, is in the Bible translations pack"
+    refute loading =~ "From the Bible translations pack on this phone."
+
     view = render_async(view)
     assert assigns(view).pack_translations == ["net"]
     assert text(view) =~ "From the Bible translations pack on this phone."

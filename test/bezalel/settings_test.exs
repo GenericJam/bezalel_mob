@@ -333,6 +333,10 @@ defmodule Bezalel.SettingsTest do
       for key <- ["jps1917", "ult", "ust"],
           do: assert(note.(key, outdated) =~ "is older and doesn't have it: update the pack")
 
+      # Still being read: what it is, nothing about the pack.
+      assert note.("ult", :loading) ==
+               "A literal English text adapted from the ULT (CC BY-SA 4.0). It doesn't have Numbers, 1–2 Chronicles, Ecclesiastes, Isaiah, Jeremiah and Ezekiel yet: those are quoted from the BSB."
+
       # A damaged pack: not "update", but remove and download again.
       for key <- ["net", "jps1917", "ult", "ust"] do
         assert note.(key, :unreadable) =~
