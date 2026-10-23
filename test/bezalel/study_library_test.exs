@@ -6,6 +6,7 @@ defmodule Bezalel.StudyLibraryTest do
 
   alias Bezalel.{AppScreen, AttributionsScreen, Packs, Repo}
   alias Bezalel.Library.Conversation
+  alias Bezalel.Packs.Manifest
   alias Bezalel.Test.{Browser, MemoryStore, PackServer}
   alias Bezalel.Views.StudyLibrary
 
@@ -172,18 +173,24 @@ defmodule Bezalel.StudyLibraryTest do
              find(view, :text, text: "CC BY-NC 4.0")
   end
 
-  test "with the NET chosen and its pack not on the phone, the study library says the tools quote the BSB" do
+  test "with a translation from the translations pack chosen and the pack not on the phone, the study library says the tools quote the BSB" do
     view = settings()
-    assert text(view) =~ "Your translation, the NET Bible, needs the NET Bible pack."
-    assert StudyLibrary.title("translations") == "NET Bible"
+
+    assert text(view) =~
+             "Your translation, the NET Bible, is in the Bible translations pack. Until it's on this phone, the study tools quote the BSB from the core pack and say so."
+
+    assert StudyLibrary.title("translations") == "Bible translations"
+
+    view = render_info(view, {:tap, {:settings, {:translation, "jps1917"}}})
+    assert text(view) =~ "Your translation, the JPS 1917, is in the Bible translations pack."
 
     view = render_info(view, {:tap, {:settings, {:translation, "bsb"}}})
-    refute text(view) =~ "needs the NET Bible pack"
+    refute text(view) =~ "is in the Bible translations pack"
   end
 
-  test "a library with the translations pack lists it as the NET Bible, optional: download, then remove",
+  test "a library with the translations pack lists it as Bible translations, optional: download, then remove",
        ctx do
-    translations = PackServer.pack("translations", "v2")
+    translations = PackServer.translations_pack("v3", ~w(net jps1917 ult ust))
 
     PackServer.publish(ctx.server, ctx.base, 2, [
       {"core", ctx.core, true},
@@ -195,25 +202,121 @@ defmodule Bezalel.StudyLibraryTest do
     assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 2."}}, 5_000
     flush()
 
-    view = settings()
+    view = render_info(settings(), {:tap, {:settings, {:translation, "ult"}}})
     assert Enum.map(assigns(view).packs.packs, & &1.name) == ["core", "translations", "notes"]
     assert %{required: false} = Enum.find(assigns(view).packs.packs, &(&1.name == "translations"))
     text = text(view)
-    assert text =~ "NET Bible"
-    refute text =~ "NET Bible · needed"
-    assert text =~ "Your translation, the NET Bible, needs the NET Bible pack."
+    assert text =~ "Bible translations"
+    refute text =~ "Bible translations · needed"
+
+    missing =
+      "Your translation, the Literal Text (ULT, adapted), is in the Bible translations pack."
+
+    assert text =~ missing
     assert pack_button?(view, {:download, "translations"})
 
     view = render_info(view, {:tap, {:packs, {:download, "translations"}}})
-    view = follow(view, notice("The translations pack is ready."))
+    view = view |> follow(notice("The translations pack is ready.")) |> render_async()
     assert pack_button?(view, {:remove, "translations"})
-    refute text(view) =~ "needs the NET Bible pack"
-    assert text(view) =~ "NET Bible, from its pack on this phone."
+    refute text(view) =~ missing
+    assert text(view) =~ "From the Bible translations pack on this phone."
 
     view = render_info(view, {:tap, {:packs, {:remove, "translations"}}})
-    assert assigns(view).toast.text == "Removed the NET Bible pack."
+    assert assigns(view).toast.text == "Removed the Bible translations pack."
     assert pack_button?(view, {:download, "translations"})
-    assert text(view) =~ "needs the NET Bible pack"
+    assert text(view) =~ missing
+  end
+
+  test "a translations pack from before data version 3 (the NET only), not yet checked: the JPS, ULT and UST say it needs updating",
+       ctx do
+    PackServer.publish(ctx.server, ctx.base, 3, [
+      {"core", ctx.core, true},
+      {"translations", PackServer.translations_pack("v3", ~w(net jps1917 ult ust)), false}
+    ])
+
+    :ok = Packs.check()
+    assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 3."}}, 5_000
+    flush()
+
+    # The old pack lands after the check (pushed, or kept from an older
+    # build): installed, with no update flagged.
+    old = PackServer.translations_pack("v2", ~w(net))
+    File.write!(Path.join(:sys.get_state(Packs).dir, "translations.sqlite"), old.raw)
+
+    view = settings()
+
+    assert %{installed: %{}, update: false} =
+             Enum.find(assigns(view).packs.packs, &(&1.name == "translations"))
+
+    # The pack is read off the screen: until it's read, nothing is said
+    # about it, neither missing nor on the phone.
+    assert assigns(view).pack_translations == :loading
+    loading = text(view)
+    assert loading =~ "Biblical Studies Press, 2019; quoted by permission. The whole Bible."
+    refute loading =~ "Needs the Bible translations pack"
+    refute loading =~ "Your translation, the NET Bible, is in the Bible translations pack"
+    refute loading =~ "From the Bible translations pack on this phone."
+
+    view = render_async(view)
+    assert assigns(view).pack_translations == ["net"]
+    assert text(view) =~ "From the Bible translations pack on this phone."
+
+    view = render_info(view, {:tap, {:settings, {:translation, "ult"}}})
+
+    assert text(view) =~
+             "The Bible translations pack on this phone is older and doesn't have it: update the pack (Study library)."
+
+    assert text(view) =~
+             "Your translation, the Literal Text (ULT, adapted), isn't in the Bible translations pack on this phone: update it."
+
+    # A read of the file as it was before a change is dropped; the current
+    # stamp's is kept.
+    stamp = assigns(view).pack_translations_stamp
+    socket = view.socket
+    stale = put_elem(stamp, 1, elem(stamp, 1) + 1)
+    kept = StudyLibrary.translations_read({:ok, {stale, ~w(net ult)}}, socket)
+    assert kept.assigns.pack_translations == ["net"]
+    taken = StudyLibrary.translations_read({:ok, {stamp, ~w(net ult)}}, socket)
+    assert taken.assigns.pack_translations == ~w(net ult)
+
+    # Replaced by a v3 pack, it's read again.
+    new = PackServer.translations_pack("v3", ~w(net jps1917 ult ust))
+    # As a download lands it: a new file renamed over the old one.
+    dir = :sys.get_state(Packs).dir
+    File.write!(Path.join(dir, ".translations.part"), new.raw)
+    File.rename!(Path.join(dir, ".translations.part"), Path.join(dir, "translations.sqlite"))
+    view = view |> render_info({:bezalel_packs, :changed}) |> render_async()
+    assert assigns(view).pack_translations == ~w(net jps1917 ult ust)
+    assert text(view) =~ "From the Bible translations pack on this phone."
+    refute text(view) =~ "is older and doesn't have it"
+  end
+
+  test "a translations pack that can't be read says so: remove it and download it again",
+       ctx do
+    PackServer.publish(ctx.server, ctx.base, 3, [
+      {"core", ctx.core, true},
+      {"translations", PackServer.translations_pack("v3", ~w(net jps1917 ult ust)), false}
+    ])
+
+    :ok = Packs.check()
+    assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 3."}}, 5_000
+    flush()
+
+    File.write!(
+      Path.join(:sys.get_state(Packs).dir, "translations.sqlite"),
+      "not a database" <> :binary.copy(<<0>>, 4096)
+    )
+
+    view = render_async(settings())
+    assert assigns(view).pack_translations == :unreadable
+
+    assert text(view) =~
+             "The Bible translations pack on this phone can't be read: remove it and download it again (Study library)."
+
+    assert text(view) =~
+             "Your translation, the NET Bible, is in the Bible translations pack, but the one on this phone can't be read: remove it and download it again."
+
+    refute text(view) =~ "update the pack"
   end
 
   test "a library with the scrolls pack lists it as the Dead Sea Scrolls, optional, after the ancient sources; a pack this app doesn't know is left out",
@@ -234,5 +337,40 @@ defmodule Bezalel.StudyLibraryTest do
     assert %{required: false} = Enum.find(assigns(view).packs.packs, &(&1.name == "scrolls"))
     assert text(view) =~ "Dead Sea Scrolls"
     assert pack_button?(view, {:download, "scrolls"})
+  end
+
+  test "data version 3's packs are listed, optional, in Settings' order", ctx do
+    assert Manifest.known() ==
+             ~w(core translations notes lxx witnesses ancient scrolls fathers dictionaries syntax graph)
+
+    optional =
+      for name <- ~w(syntax fathers graph witnesses dictionaries),
+          do: {name, PackServer.pack(name, "v3"), false}
+
+    PackServer.publish(ctx.server, ctx.base, 3, [{"core", ctx.core, true} | optional])
+    :ok = Packs.check()
+    assert_receive {:bezalel_packs, {:notice, "Up to date: study library version 3."}}, 5_000
+    flush()
+
+    view = settings()
+
+    assert Enum.map(assigns(view).packs.packs, & &1.name) ==
+             ~w(core witnesses fathers dictionaries syntax graph)
+
+    text = text(view)
+
+    for {name, title} <- [
+          {"witnesses", "Textual witnesses (Samaritan Pentateuch, SBLGNT, HOTTP)"},
+          {"fathers", "Apostolic Fathers"},
+          {"dictionaries", "UBS Hebrew and Greek dictionaries"},
+          {"syntax", "Clause structure (MACULA)"}
+        ] do
+      assert StudyLibrary.title(name) == title
+      assert text =~ title
+      assert %{required: false} = Enum.find(assigns(view).packs.packs, &(&1.name == name))
+      assert pack_button?(view, {:download, name})
+    end
+
+    assert_renderable(view)
   end
 end

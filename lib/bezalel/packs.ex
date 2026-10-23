@@ -57,12 +57,14 @@ defmodule Bezalel.Packs do
           error: String.t() | nil
         }
 
+  @typedoc "`dir`: where the packs are, for a reader of an installed pack's contents."
   @type status :: %{
           packs: [pack()],
           data_version: pos_integer() | nil,
           checking: boolean(),
           notice: String.t() | nil,
-          storage: non_neg_integer()
+          storage: non_neg_integer(),
+          dir: Path.t()
         }
 
   # ── API ───────────────────────────────────────────────────────────────────
@@ -538,7 +540,8 @@ defmodule Bezalel.Packs do
       data_version: state.manifest && state.manifest.data_version,
       checking: state.checking != nil,
       notice: state.notice,
-      storage: storage(state)
+      storage: storage(state),
+      dir: state.dir
     }
   end
 

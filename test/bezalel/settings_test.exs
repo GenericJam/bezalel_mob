@@ -237,47 +237,124 @@ defmodule Bezalel.SettingsTest do
   end
 
   describe "study" do
+    # The translation chooser's rows: the key each taps, in order, and the
+    # one outlined as chosen.
+    defp translation_rows(view) do
+      for %{props: %{on_tap: {_, {:settings, {:translation, key}}}} = props} <-
+            find_all(view, :box),
+          do: {key, props.border_color == :secondary}
+    end
+
     test "translation, results per list and scripture labels: the defaults, then each persists across a re-mount" do
       view = settings()
       assert assigns(view).study == %Preferences{}
-      assert selected?(view, {:settings, {:translation, "net"}})
+
+      assert %{props: %{on_tap: {_, {:settings, :translations}}}} =
+               find(view, :box, id: "settings-translation")
+
+      assert text(view) =~ "NET Bible"
       assert selected?(view, {:settings, {:limit, 8}})
       assert selected?(view, {:settings, {:labels, true}})
-      assert text(view) =~ "The NET Bible comes in its own pack"
+      assert text(view) =~ "Needs the Bible translations pack"
       assert_renderable(view)
+
+      # The chooser: the five translations, the NET chosen.
+      chooser = render_info(view, {:tap, {:settings, :translations}})
+      assert assigns(chooser).sheet == :translations
+
+      assert translation_rows(chooser) == [
+               {"net", true},
+               {"bsb", false},
+               {"jps1917", false},
+               {"ult", false},
+               {"ust", false}
+             ]
+
+      assert_renderable(chooser)
+
+      # A choice closes it.
+      view = render_info(chooser, {:tap, {:settings, {:translation, "jps1917"}}})
+      assert assigns(view).sheet == nil
+      assert assigns(view).study.translation == "jps1917"
+      assert text(view) =~ "JPS 1917"
 
       view =
         view
-        |> render_info({:tap, {:settings, {:translation, "bsb"}}})
         |> render_info({:tap, {:settings, {:limit, 12}}})
         |> render_info({:tap, {:settings, {:labels, false}}})
 
-      assert %{translation: "bsb", limit: 12, scripture_labels: false} = assigns(view).study
-      assert text(view) =~ "Berean Standard Bible, from the core pack."
+      assert %{translation: "jps1917", limit: 12, scripture_labels: false} = assigns(view).study
 
       again = settings()
-      assert %{translation: "bsb", limit: 12, scripture_labels: false} = assigns(again).study
-      assert selected?(again, {:settings, {:translation, "bsb"}})
-      refute selected?(again, {:settings, {:translation, "net"}})
+      assert %{translation: "jps1917", limit: 12, scripture_labels: false} = assigns(again).study
+
+      assert {"jps1917", true} in translation_rows(
+               render_info(again, {:tap, {:settings, :translations}})
+             )
+
       assert selected?(again, {:settings, {:limit, 12}})
       assert selected?(again, {:settings, {:labels, false}})
 
       # What the study tools read (config :bezalel_core, :preferences),
       # whatever the session.
-      assert %{translation: "bsb", limit: 12, scripture_labels: false} =
+      assert %{translation: "jps1917", limit: 12, scripture_labels: false} =
                Preferences.current(%{session_id: "any"})
     end
 
-    test "the NET's acknowledgement is a tap away" do
+    test "each translation says what it is, what it covers and whether the phone has it" do
+      # The translations pack's keys: not installed, data version 3, and one
+      # from before the JPS, ULT and UST.
+      none = nil
+      installed = ~w(net jps1917 ult ust)
+      outdated = ~w(net)
+
+      note = &Bezalel.Views.Settings.translation_note/2
+
+      assert note.("bsb", none) == "Public domain; the whole Bible, from the core pack."
+      assert note.("net", installed) =~ "quoted by permission. The whole Bible."
+
+      assert note.("jps1917", installed) =~
+               "The Old Testament only: New Testament verses are quoted from the BSB."
+
+      for key <- ["ult", "ust"] do
+        assert note.(key, installed) =~
+                 "It doesn't have Numbers, 1–2 Chronicles, Ecclesiastes, Isaiah, Jeremiah and Ezekiel yet: those are quoted from the BSB."
+
+        refute note.(key, installed) =~ "unfoldingWord"
+      end
+
+      for key <- ["net", "jps1917", "ult", "ust"] do
+        assert note.(key, installed) =~ "From the Bible translations pack on this phone."
+        assert note.(key, none) =~ "Needs the Bible translations pack (Study library)"
+      end
+
+      assert note.("net", outdated) =~ "From the Bible translations pack on this phone."
+
+      for key <- ["jps1917", "ult", "ust"],
+          do: assert(note.(key, outdated) =~ "is older and doesn't have it: update the pack")
+
+      # Still being read: what it is, nothing about the pack.
+      assert note.("ult", :loading) ==
+               "A literal English text adapted from the ULT (CC BY-SA 4.0). It doesn't have Numbers, 1–2 Chronicles, Ecclesiastes, Isaiah, Jeremiah and Ezekiel yet: those are quoted from the BSB."
+
+      # A damaged pack: not "update", but remove and download again.
+      for key <- ["net", "jps1917", "ult", "ust"] do
+        assert note.(key, :unreadable) =~
+                 "The Bible translations pack on this phone can't be read: remove it and download it again (Study library)."
+      end
+    end
+
+    test "the NET's acknowledgement is a tap away while the NET is the translation" do
       view = settings()
+      ack = "The NET Bible® is quoted by permission: see Sources and licences"
 
-      assert %{props: %{on_tap: {_, {:packs, :attributions}}}} =
-               find(view, :text,
-                 text: "The NET Bible® is quoted by permission: see Sources and licences"
-               )
+      assert %{props: %{on_tap: {_, {:packs, :attributions}}}} = find(view, :text, text: ack)
 
-      view = render_info(view, {:tap, {:packs, :attributions}})
-      assert navigated_to(view) == AttributionsScreen
+      assert navigated_to(render_info(view, {:tap, {:packs, :attributions}})) ==
+               AttributionsScreen
+
+      view = render_info(view, {:tap, {:settings, {:translation, "ust"}}})
+      refute find(view, :text, text: ack)
     end
 
     test "the approach: your own saved and kept, a toast that it applies from the next question, the fixed part shown; Restore default clears it" do

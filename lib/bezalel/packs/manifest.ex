@@ -10,12 +10,16 @@ defmodule Bezalel.Packs.Manifest do
   nothing else from the manifest reaches a path.
   """
 
-  # The translations pack holds the NET Bible (bezalel_core's
-  # `Bezalel.Study.Translations`), the default English: optional like the
-  # packs after it, listed next to core. The scrolls pack (the Dead Sea
-  # Scrolls' non-biblical works and the biblical manuscripts' readings),
-  # optional too, follows the ancient sources it extends.
-  @known ~w(core translations notes lxx ancient scrolls graph)
+  # The translations pack holds the NET Bible, the JPS 1917 and the adapted
+  # ULT and UST (bezalel_core's `Bezalel.Study.Translations`), listed next
+  # to core; every pack after core is optional. The witnesses pack (the
+  # Samaritan Pentateuch, the SBLGNT and its apparatus, the HOTTP) sits
+  # with the LXX it is compared with; the scrolls pack (the Dead Sea
+  # Scrolls' non-biblical works and the biblical manuscripts' readings)
+  # follows the ancient sources it extends, and the Apostolic Fathers after
+  # them. Then the UBS dictionaries, MACULA's clause structure (syntax) and
+  # people and places (graph).
+  @known ~w(core translations notes lxx witnesses ancient scrolls fathers dictionaries syntax graph)
 
   @type entry :: %{
           name: String.t(),

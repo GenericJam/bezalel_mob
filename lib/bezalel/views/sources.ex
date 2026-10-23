@@ -9,9 +9,10 @@ defmodule Bezalel.Views.Sources do
   ones the reply cites first, then "Also consulted". An entry with a page
   opens it in the browser (Study's `{:open_url, url}`); a print-only book
   is its reference as text. English the model makes itself from an
-  original is marked "AI translation", and the unpublished draft rendering
-  the textual-variant tool quotes is marked as such, not Heiser's: each
-  with links to the original texts.
+  original is marked "AI translation", a published machine translation
+  (CAFE's English of the Apostolic Fathers) "Machine translation", and the
+  unpublished draft rendering the textual-variant tool quotes is marked as
+  such, not Heiser's: each with links to the original texts.
 
   Open or not is the reply's `"<id>:sources"` key in Study's `expanded`,
   toggled by `{:block, key}` like a block's, so a streamed reply's open
@@ -123,10 +124,13 @@ defmodule Bezalel.Views.Sources do
   defp mark(%Citation{translation: :assistant}),
     do: [note("AI translation: any English for it is the assistant's own")]
 
+  defp mark(%Citation{translation: :machine}),
+    do: [note("Machine translation (AI-generated), not a human translator's")]
+
   defp mark(_published), do: []
 
   defp originals(%Citation{translation: t, original: [_ | _] = original})
-       when t in [:assistant, :unpublished_draft] do
+       when t in [:assistant, :unpublished_draft, :machine] do
     links =
       for %{label: label, url: url} <- original do
         ~MOB"""

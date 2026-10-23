@@ -224,14 +224,13 @@ defmodule Bezalel.Views.Settings do
     ]
   end
 
-  # The study preferences (`Bezalel.Study.Preferences`): the choices in a
-  # card, then the approach and the sources, each on a screen of its own.
+  # The study preferences (`Bezalel.Study.Preferences`): the translation, a
+  # row opening its chooser (a sheet, like the models'); the other choices
+  # in a card; then the approach and the sources, each on a screen of its
+  # own.
   defp study(assigns) do
     prefs = assigns.study
-    translations = Translations.all()
-
-    translation_opts =
-      for t <- translations, do: {t.abbreviation, {self(), {:settings, {:translation, t.key}}}}
+    translation = Translations.get(prefs.translation) || Translations.get("bsb")
 
     limit_opts = for n <- @limits, do: {"#{n}", {self(), {:settings, {:limit, n}}}}
 
@@ -242,19 +241,23 @@ defmodule Bezalel.Views.Settings do
 
     licence = {self(), {:packs, :attributions}}
 
-    choices =
-      UI.card(
-        [
-          field("Translation"),
-          UI.segmented(translation_opts, index(translations, &(&1.key == prefs.translation))),
-          note(translation_note(prefs.translation, assigns.packs)),
+    # The NET's terms: the permission is acknowledged where it's quoted.
+    permission =
+      if translation.key == "net",
+        do: [
           ~MOB(<Text
   text="The NET Bible® is quoted by permission: see Sources and licences"
   font={:ui_medium}
   text_size={12}
   text_color={:secondary}
   on_tap={licence}
-/>),
+/>)
+        ],
+        else: []
+
+    choices =
+      UI.card(
+        [
           field("Results per list"),
           UI.segmented(limit_opts, index(@limits, &(&1 == prefs.limit))),
           note(
@@ -277,6 +280,13 @@ defmodule Bezalel.Views.Settings do
     sources_note = "#{on} of #{length(Sources.all())} on"
 
     [
+      choice_row(
+        "Translation",
+        {translation.name, translation_note(translation.key, assigns.pack_translations), nil},
+        tap: {self(), {:settings, :translations}},
+        id: "settings-translation"
+      ),
+      permission,
       choices,
       nav_row("Approach", approach_note, {self(), {:settings, :approach}}),
       nav_row("Sources", sources_note, {self(), {:settings, :sources}}),
@@ -289,14 +299,55 @@ defmodule Bezalel.Views.Settings do
 
   defp index(list, fun), do: Enum.find_index(list, fun)
 
-  defp translation_note("net", packs) do
-    if Enum.any?(packs.packs, &(&1.name == "translations" and &1.installed != nil)),
-      do: "NET Bible, from its pack on this phone.",
-      else:
-        "The NET Bible comes in its own pack (Study library). Until it's on this phone, the tools quote the BSB and say so."
-  end
+  # The books ULT and UST v91 (the translations pack's release) don't have yet.
+  @unreleased "Numbers, 1–2 Chronicles, Ecclesiastes, Isaiah, Jeremiah and Ezekiel"
 
-  defp translation_note(_bsb, _packs), do: "Berean Standard Bible, from the core pack."
+  @doc """
+  What translation `key` is, where it comes from, what it covers, and
+  whether this phone has it (`in_pack`: the keys the translations pack on
+  the phone holds, nil while it isn't installed, `:loading` while it is
+  being read (no line about the pack then), `:unreadable` for a damaged
+  file; the `:pack_translations` assign): the Settings row's line and the
+  chooser's.
+  """
+  @spec translation_note(String.t(), [String.t()] | nil | :loading | :unreadable) ::
+          String.t()
+  def translation_note("bsb", _in_pack),
+    do: "Public domain; the whole Bible, from the core pack."
+
+  def translation_note(key, :loading), do: about(key)
+
+  def translation_note(key, in_pack), do: about(key) <> " " <> pack_status(key, in_pack)
+
+  defp about("net"),
+    do: "Biblical Studies Press, 2019; quoted by permission. The whole Bible."
+
+  defp about("jps1917"),
+    do:
+      "The Jewish Publication Society's 1917 translation, public domain. The Old Testament only: New Testament verses are quoted from the BSB."
+
+  defp about("ult"),
+    do:
+      "A literal English text adapted from the ULT (CC BY-SA 4.0). It doesn't have #{@unreleased} yet: those are quoted from the BSB."
+
+  defp about("ust"),
+    do:
+      "A simplified, meaning-based English text adapted from the UST (CC BY-SA 4.0). It doesn't have #{@unreleased} yet: those are quoted from the BSB."
+
+  defp pack_status(_key, nil),
+    do:
+      "Needs the Bible translations pack (Study library); until it's on this phone, the tools quote the BSB and say so."
+
+  defp pack_status(_key, :unreadable),
+    do:
+      "The Bible translations pack on this phone can't be read: remove it and download it again (Study library). Until then the tools quote the BSB and say so."
+
+  defp pack_status(key, in_pack) do
+    if key in in_pack,
+      do: "From the Bible translations pack on this phone.",
+      else:
+        "The Bible translations pack on this phone is older and doesn't have it: update the pack (Study library). Until then the tools quote the BSB and say so."
+  end
 
   # A row opening a screen: its title, what it's set to, and a cue (Edit).
   defp nav_row(title, value, tap, cue \\ "Edit") do
@@ -626,6 +677,7 @@ defmodule Bezalel.Views.Settings do
   end
 
   def handle(:models, socket), do: {:noreply, Socket.assign(socket, :sheet, :models)}
+  def handle(:translations, socket), do: {:noreply, Socket.assign(socket, :sheet, :translations)}
 
   def handle(:pushback_models, socket),
     do: {:noreply, Socket.assign(socket, :sheet, :pushback_models)}
@@ -697,7 +749,10 @@ defmodule Bezalel.Views.Settings do
   def handle(:gallery, socket),
     do: {:noreply, Socket.push_screen(socket, Bezalel.DesignGalleryScreen)}
 
-  def handle({:translation, key}, socket), do: {:noreply, put_study(socket, translation: key)}
+  # From the translation chooser, which closes on a choice.
+  def handle({:translation, key}, socket),
+    do: {:noreply, socket |> put_study(translation: key) |> Socket.assign(:sheet, nil)}
+
   def handle({:limit, n}, socket), do: {:noreply, put_study(socket, limit: n)}
   def handle({:labels, show?}, socket), do: {:noreply, put_study(socket, scripture_labels: show?)}
 

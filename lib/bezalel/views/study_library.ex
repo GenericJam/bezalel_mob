@@ -10,18 +10,24 @@ defmodule Bezalel.Views.StudyLibrary do
   import Mob.Sigil
 
   alias Bezalel.{Packs, Settings}
+  alias Bezalel.Study.Translations
   alias Bezalel.Views.Helpers
+  alias Exqlite.Sqlite3
   alias Mob.Socket
   alias MobBezalel.UI
 
   @titles %{
     "core" => "Core",
+    "translations" => "Bible translations",
     "notes" => "Notes",
     "lxx" => "Septuagint",
+    "witnesses" => "Textual witnesses (Samaritan Pentateuch, SBLGNT, HOTTP)",
     "ancient" => "Ancient sources",
     "scrolls" => "Dead Sea Scrolls",
-    "graph" => "People and places",
-    "translations" => "NET Bible"
+    "fathers" => "Apostolic Fathers",
+    "dictionaries" => "UBS Hebrew and Greek dictionaries",
+    "syntax" => "Clause structure (MACULA)",
+    "graph" => "People and places"
   }
 
   # ── State ─────────────────────────────────────────────────────────────────
@@ -46,11 +52,91 @@ defmodule Bezalel.Views.StudyLibrary do
   def event(:changed, socket), do: refresh(socket)
   def event({:notice, text}, socket), do: socket |> refresh() |> Helpers.toast(text)
 
-  defp refresh(socket),
-    do: Socket.assign(socket, packs: Packs.status(), metered: Packs.metered?())
+  defp refresh(socket) do
+    socket
+    |> Socket.assign(packs: Packs.status(), metered: Packs.metered?())
+    |> pack_translations()
+  end
 
   defp installed?(status, name),
     do: Enum.any?(status.packs, &(&1.name == name and &1.installed != nil))
+
+  # The translation keys the translations pack on the phone holds
+  # (`:pack_translations`: nil while it isn't installed, `:loading` while an
+  # installed pack is first read, `:unreadable` for a damaged file): a pack
+  # from before data version 3 has only the NET, whether or not a check has
+  # seen the update yet. The file's stamp (inode, size, mtime: a download
+  # renames a new file into place) is taken here; when it changes the pack
+  # is read off the screen (`start_async`), the last read value kept
+  # meanwhile (`:loading` when there is none), and the result kept only if
+  # the stamp still matches (`translations_read/2`).
+  defp pack_translations(socket) do
+    status = socket.assigns.packs
+    file = Path.join(status.dir, "translations.sqlite")
+
+    stamp =
+      with true <- installed?(status, "translations"),
+           {:ok, %{size: size, mtime: mtime, inode: inode}} <- File.stat(file),
+           do: {inode, size, mtime},
+           else: (_ -> nil)
+
+    cond do
+      Map.has_key?(socket.assigns, :pack_translations_stamp) and
+          socket.assigns.pack_translations_stamp == stamp ->
+        socket
+
+      stamp == nil ->
+        Socket.assign(socket, pack_translations_stamp: nil, pack_translations: nil)
+
+      true ->
+        socket
+        |> Socket.assign(
+          pack_translations_stamp: stamp,
+          pack_translations: Map.get(socket.assigns, :pack_translations) || :loading
+        )
+        |> Socket.start_async(:pack_translations, fn ->
+          {stamp, read_pack_translations(file)}
+        end)
+    end
+  end
+
+  @doc """
+  The translations pack's keys, read for the file stamp they carry: kept
+  when it is still the pack's stamp, dropped when the file has changed
+  since (a newer read is on its way).
+  """
+  def translations_read({:ok, {stamp, keys}}, socket) do
+    if socket.assigns[:pack_translations_stamp] == stamp,
+      do: Socket.assign(socket, :pack_translations, keys),
+      else: socket
+  end
+
+  def translations_read({:exit, _reason}, socket), do: socket
+
+  @doc """
+  The translation keys in the translations pack at `file` (its
+  `translations` table), or `:unreadable` when it can't be read.
+  """
+  @spec read_pack_translations(Path.t()) :: [String.t()] | :unreadable
+  def read_pack_translations(file) do
+    case Sqlite3.open(file, mode: :readonly) do
+      {:ok, conn} ->
+        try do
+          with {:ok, statement} <- Sqlite3.prepare(conn, "SELECT key FROM translations"),
+               {:ok, rows} <- Sqlite3.fetch_all(conn, statement) do
+            Sqlite3.release(conn, statement)
+            for [key] <- rows, do: key
+          else
+            _ -> :unreadable
+          end
+        after
+          Sqlite3.close(conn)
+        end
+
+      {:error, _} ->
+        :unreadable
+    end
+  end
 
   # ── Events ────────────────────────────────────────────────────────────────
 
@@ -112,7 +198,7 @@ defmodule Bezalel.Views.StudyLibrary do
   text_color={:on_surface}
 />),
           metered_note(assigns, Enum.any?(status.packs, &(&1.installed == nil))),
-          net_note(assigns.study, status),
+          translation_note(assigns.study, assigns.pack_translations),
           note(empty)
         ],
         padding: 14,
@@ -232,18 +318,39 @@ defmodule Bezalel.Views.StudyLibrary do
 
   defp metered_note(_assigns, _missing), do: []
 
-  # The NET (the default translation) is in a pack of its own; without it
-  # the tools quote the BSB from core, and say so.
-  defp net_note(%{translation: "net"}, status) do
-    if installed?(status, "translations"),
-      do: [],
-      else:
-        note(
-          "Your translation, the NET Bible, needs the NET Bible pack. Until it's on this phone, the study tools quote the BSB from the core pack and say so."
-        )
-  end
+  # Every translation but the BSB (core) is in the translations pack;
+  # without it, with a pack from before the translation was added, or with
+  # one that can't be read, the tools quote the BSB from core, and say so.
+  defp translation_note(%{translation: key}, in_pack) do
+    case Translations.get(key) do
+      %{key: "bsb"} ->
+        []
 
-  defp net_note(_prefs, _status), do: []
+      _translation when in_pack == :loading ->
+        []
+
+      %{name: name} when in_pack == nil ->
+        note(
+          "Your translation, the #{name}, is in the #{title("translations")} pack. Until it's on this phone, the study tools quote the BSB from the core pack and say so."
+        )
+
+      %{name: name} when in_pack == :unreadable ->
+        note(
+          "Your translation, the #{name}, is in the #{title("translations")} pack, but the one on this phone can't be read: remove it and download it again. Until then, the study tools quote the BSB from the core pack and say so."
+        )
+
+      %{name: name} ->
+        if key in in_pack,
+          do: [],
+          else:
+            note(
+              "Your translation, the #{name}, isn't in the #{title("translations")} pack on this phone: update it. Until then, the study tools quote the BSB from the core pack and say so."
+            )
+
+      nil ->
+        []
+    end
+  end
 
   defp note(nil), do: []
 
@@ -292,7 +399,7 @@ defmodule Bezalel.Views.StudyLibrary do
       ~MOB(<Text text={sizes} font={:ui_medium} text_size={14} text_color={:on_background} />),
       metered,
       note(
-        "Study works without it, but the tools will say the pack is missing. The core pack and the optional ones (the NET Bible, notes, Septuagint, ancient sources, the Dead Sea Scrolls, people and places) are in Settings → Study library."
+        "Study works without it, but the tools will say the pack is missing. The core pack and the optional ones (Bible translations, notes, Septuagint, textual witnesses, ancient sources, the Dead Sea Scrolls, the Apostolic Fathers, the UBS dictionaries, clause structure, people and places) are in Settings → Study library."
       ),
       ~MOB"""
       <Row gap={10} fill_width={true}>

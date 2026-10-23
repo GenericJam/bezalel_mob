@@ -32,9 +32,10 @@ defmodule Bezalel.Test.PackServer do
 
   @doc """
   A small SQLite pack named `name` (a `pack_meta` row tagged `tag`, so
-  versions differ), as `%{raw: bytes, zst: bytes}`.
+  versions differ), as `%{raw: bytes, zst: bytes}`; `sql` adds to it (a
+  translations pack's `translations` table).
   """
-  def pack(name, tag) do
+  def pack(name, tag, sql \\ "") do
     file = Path.join(System.tmp_dir!(), "pack_#{System.unique_integer([:positive])}.sqlite")
     {:ok, db} = Sqlite3.open(file)
 
@@ -45,12 +46,24 @@ defmodule Bezalel.Test.PackServer do
       CREATE TABLE filler (n INTEGER, text TEXT);
       WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000)
       INSERT INTO filler SELECT i, '#{tag} row ' || i || ' ' || hex(randomblob(16)) FROM n;
+      #{sql}
       """)
 
     :ok = Sqlite3.close(db)
     raw = File.read!(file)
     File.rm!(file)
     %{raw: raw, zst: IO.iodata_to_binary(:zstd.compress(raw))}
+  end
+
+  @doc "A translations pack holding `keys` (its `translations` table)."
+  def translations_pack(tag, keys) do
+    values = Enum.map_join(keys, ", ", &"('#{&1}')")
+
+    pack(
+      "translations",
+      tag,
+      "CREATE TABLE translations (key TEXT PRIMARY KEY); INSERT INTO translations VALUES #{values};"
+    )
   end
 
   @doc """

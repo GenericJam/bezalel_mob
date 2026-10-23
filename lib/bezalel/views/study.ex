@@ -393,7 +393,7 @@ defmodule Bezalel.Views.Study do
           ~MOB(<Text text={v["ref"]} font={:ui_semibold} text_size={11} text_color={:muted} />)
 
         words = Enum.map(v["tokens"], &card_word(&1, c["words"]))
-        wrap([ref | words] ++ if(i == last, do: net_link(c), else: []))
+        wrap([ref | words] ++ row_version(v, c) ++ if(i == last, do: net_link(c), else: []))
       end
 
     more =
@@ -406,6 +406,17 @@ defmodule Bezalel.Views.Study do
     hint = if c["words"] == %{}, do: nil, else: "Tap a highlighted word for the original"
     passage_card(c["title"], c["version"], verses ++ more, hint)
   end
+
+  # A verse quoted in another translation than the card's (the BSB standing
+  # in for a book the chosen translation lacks) says which, so the card's
+  # label doesn't claim it.
+  defp row_version(%{"version" => own}, %{"version" => version})
+       when is_binary(own) and own != version do
+    text = "(" <> own <> ")"
+    [~MOB(<Text text={text} font={:ui_semibold} text_size={13} text_color={:muted} />)]
+  end
+
+  defp row_version(_verse, _card), do: []
 
   # The NET's terms: "(NET)" follows the quotation, linked to netbible.org.
   defp net_link(%{"version" => label, "version_url" => url}) when is_binary(url) do
