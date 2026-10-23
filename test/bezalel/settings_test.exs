@@ -332,6 +332,12 @@ defmodule Bezalel.SettingsTest do
 
       for key <- ["jps1917", "ult", "ust"],
           do: assert(note.(key, outdated) =~ "is older and doesn't have it: update the pack")
+
+      # A damaged pack: not "update", but remove and download again.
+      for key <- ["net", "jps1917", "ult", "ust"] do
+        assert note.(key, :unreadable) =~
+                 "The Bible translations pack on this phone can't be read: remove it and download it again (Study library)."
+      end
     end
 
     test "the NET's acknowledgement is a tap away while the NET is the translation" do

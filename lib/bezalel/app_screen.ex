@@ -437,6 +437,9 @@ defmodule Bezalel.AppScreen do
   def handle_async({:lexicon, strongs}, result, socket),
     do: {:noreply, Study.lexicon(strongs, result, socket)}
 
+  def handle_async(:pack_translations, result, socket),
+    do: {:noreply, StudyLibrary.translations_read(result, socket)}
+
   def handle_async(:build, result, socket), do: {:noreply, Workshop.built(result, socket)}
 
   def handle_async(:usage_refresh, result, socket),

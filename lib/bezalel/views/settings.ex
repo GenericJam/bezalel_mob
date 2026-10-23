@@ -305,10 +305,11 @@ defmodule Bezalel.Views.Settings do
   @doc """
   What translation `key` is, where it comes from, what it covers, and
   whether this phone has it (`in_pack`: the keys the translations pack on
-  the phone holds, nil while it isn't installed; the `:pack_translations`
-  assign): the Settings row's line and the chooser's.
+  the phone holds, nil while it isn't installed, `:unreadable` for a
+  damaged file; the `:pack_translations` assign): the Settings row's line
+  and the chooser's.
   """
-  @spec translation_note(String.t(), [String.t()] | nil) :: String.t()
+  @spec translation_note(String.t(), [String.t()] | nil | :unreadable) :: String.t()
   def translation_note("bsb", _in_pack),
     do: "Public domain; the whole Bible, from the core pack."
 
@@ -332,6 +333,10 @@ defmodule Bezalel.Views.Settings do
   defp pack_status(_key, nil),
     do:
       "Needs the Bible translations pack (Study library); until it's on this phone, the tools quote the BSB and say so."
+
+  defp pack_status(_key, :unreadable),
+    do:
+      "The Bible translations pack on this phone can't be read: remove it and download it again (Study library). Until then the tools quote the BSB and say so."
 
   defp pack_status(key, in_pack) do
     if key in in_pack,

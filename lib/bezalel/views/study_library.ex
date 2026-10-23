@@ -62,34 +62,61 @@ defmodule Bezalel.Views.StudyLibrary do
     do: Enum.any?(status.packs, &(&1.name == name and &1.installed != nil))
 
   # The translation keys the translations pack on the phone holds
-  # (`:pack_translations`; nil while it isn't installed): a pack from
-  # before data version 3 has only the NET, whether or not a check has seen
-  # the update yet. Read again only when the file changes.
+  # (`:pack_translations`: nil while it isn't installed, `:unreadable` for a
+  # damaged file): a pack from before data version 3 has only the NET,
+  # whether or not a check has seen the update yet. The file's stamp (inode,
+  # size, mtime: a download renames a new file into place) is taken here;
+  # when it changes the pack is read off the screen
+  # (`start_async`), the last value kept meanwhile, and the result kept only
+  # if the stamp still matches (`translations_read/2`).
   defp pack_translations(socket) do
     status = socket.assigns.packs
     file = Path.join(status.dir, "translations.sqlite")
 
     stamp =
       with true <- installed?(status, "translations"),
-           {:ok, %{size: size, mtime: mtime}} <- File.stat(file),
-           do: {size, mtime},
+           {:ok, %{size: size, mtime: mtime, inode: inode}} <- File.stat(file),
+           do: {inode, size, mtime},
            else: (_ -> nil)
 
-    if Map.has_key?(socket.assigns, :pack_translations) and
-         socket.assigns[:pack_translations_stamp] == stamp,
-       do: socket,
-       else:
-         Socket.assign(socket,
-           pack_translations_stamp: stamp,
-           pack_translations: stamp && read_pack_translations(file)
-         )
+    cond do
+      Map.has_key?(socket.assigns, :pack_translations_stamp) and
+          socket.assigns.pack_translations_stamp == stamp ->
+        socket
+
+      stamp == nil ->
+        Socket.assign(socket, pack_translations_stamp: nil, pack_translations: nil)
+
+      true ->
+        socket
+        |> Socket.assign(
+          pack_translations_stamp: stamp,
+          pack_translations: Map.get(socket.assigns, :pack_translations)
+        )
+        |> Socket.start_async(:pack_translations, fn ->
+          {stamp, read_pack_translations(file)}
+        end)
+    end
   end
 
   @doc """
-  The translation keys in the translations pack at `file` (its
-  `translations` table), `[]` when it can't be read.
+  The translations pack's keys, read for the file stamp they carry: kept
+  when it is still the pack's stamp, dropped when the file has changed
+  since (a newer read is on its way).
   """
-  @spec read_pack_translations(Path.t()) :: [String.t()]
+  def translations_read({:ok, {stamp, keys}}, socket) do
+    if socket.assigns[:pack_translations_stamp] == stamp,
+      do: Socket.assign(socket, :pack_translations, keys),
+      else: socket
+  end
+
+  def translations_read({:exit, _reason}, socket), do: socket
+
+  @doc """
+  The translation keys in the translations pack at `file` (its
+  `translations` table), or `:unreadable` when it can't be read.
+  """
+  @spec read_pack_translations(Path.t()) :: [String.t()] | :unreadable
   def read_pack_translations(file) do
     case Sqlite3.open(file, mode: :readonly) do
       {:ok, conn} ->
@@ -99,14 +126,14 @@ defmodule Bezalel.Views.StudyLibrary do
             Sqlite3.release(conn, statement)
             for [key] <- rows, do: key
           else
-            _ -> []
+            _ -> :unreadable
           end
         after
           Sqlite3.close(conn)
         end
 
       {:error, _} ->
-        []
+        :unreadable
     end
   end
 
@@ -291,8 +318,8 @@ defmodule Bezalel.Views.StudyLibrary do
   defp metered_note(_assigns, _missing), do: []
 
   # Every translation but the BSB (core) is in the translations pack;
-  # without it, or with a pack from before the translation was added, the
-  # tools quote the BSB from core, and say so.
+  # without it, with a pack from before the translation was added, or with
+  # one that can't be read, the tools quote the BSB from core, and say so.
   defp translation_note(%{translation: key}, in_pack) do
     case Translations.get(key) do
       %{key: "bsb"} ->
@@ -301,6 +328,11 @@ defmodule Bezalel.Views.StudyLibrary do
       %{name: name} when in_pack == nil ->
         note(
           "Your translation, the #{name}, is in the #{title("translations")} pack. Until it's on this phone, the study tools quote the BSB from the core pack and say so."
+        )
+
+      %{name: name} when in_pack == :unreadable ->
+        note(
+          "Your translation, the #{name}, is in the #{title("translations")} pack, but the one on this phone can't be read: remove it and download it again. Until then, the study tools quote the BSB from the core pack and say so."
         )
 
       %{name: name} ->

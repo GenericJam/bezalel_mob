@@ -542,8 +542,9 @@ loading with `start_async/3` / `handle_async/3`), `components`, `events`,
   with the NET (the default), BSB, JPS 1917, ULT and UST, each with
   `Views.Settings.translation_note/2` (what it is, what it covers, whether
   the phone has it: from the installed pack's own `translations` table,
-  `StudyLibrary`'s `:pack_translations`, so a data version 2 pack that
-  holds only the NET says so before any check). The ULT's and UST's
+  `StudyLibrary`'s `:pack_translations`, read in `start_async` when the
+  file's stamp changes, `:unreadable` for a damaged file, so a data
+  version 2 pack that holds only the NET says so before any check). The ULT's and UST's
   publisher is named only in their required attribution. All but the BSB are in the translations pack ("Bible
   translations" in the study library and `Bezalel.Packs.Manifest.known/0`,
   optional); without it the tools quote the BSB and say so, and a book the
